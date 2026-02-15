@@ -158,6 +158,10 @@ ORT works best when the project is inside a git repository. If you see this warn
 - [SPDX License List](https://spdx.org/licenses/)
 - [CycloneDX Specification](https://cyclonedx.org/)
 
+## Disclaimer
+
+This extension was developed as a personal project in free time. It is not affiliated with, endorsed by, or officially connected to the OSS Review Toolkit (ORT) project or any employer.
+
 ## License
 
 This extension is released under the [MIT License](LICENSE).
