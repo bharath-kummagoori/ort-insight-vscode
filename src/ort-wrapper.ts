@@ -181,6 +181,57 @@ export class ORTWrapper {
   }
 
   /**
+   * Generate ORT native HTML report (StaticHTML or WebApp)
+   */
+  async generateReport(
+    analyzerResultFile: string,
+    format: 'StaticHTML' | 'WebApp'
+  ): Promise<string> {
+    const config = vscode.workspace.getConfiguration('ortInsight');
+    const ortPath = config.get<string>('ortPath', 'ort');
+    const timeout = config.get<number>('timeout', 600000);
+
+    const outputDir = path.join(path.dirname(analyzerResultFile), 'html-report');
+
+    // Clean old report directory to avoid "output files must not exist" error
+    if (fs.existsSync(outputDir)) {
+      fs.rmSync(outputDir, { recursive: true, force: true });
+    }
+    fs.mkdirSync(outputDir, { recursive: true });
+
+    this.outputChannel.appendLine('');
+    this.outputChannel.appendLine(`Generating ORT ${format} report...`);
+    this.outputChannel.appendLine('');
+
+    const args = [
+      'report',
+      '-i', analyzerResultFile,
+      '-o', outputDir,
+      '-f', format
+    ];
+
+    try {
+      await this.executeCommand(ortPath, args, outputDir, timeout);
+
+      this.outputChannel.appendLine('');
+
+      // Find the generated HTML file
+      const files = fs.readdirSync(outputDir);
+      const htmlFile = files.find(f => f.endsWith('.html')) || files[0];
+
+      const resultFile = path.join(outputDir, htmlFile || 'report.html');
+      this.outputChannel.appendLine(`Report generated: ${resultFile}`);
+
+      return resultFile;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.outputChannel.appendLine('');
+      this.outputChannel.appendLine(`ERROR: Report generation failed: ${message}`);
+      throw new Error(`Report generation failed: ${message}`);
+    }
+  }
+
+  /**
    * Check if ORT is installed and available
    */
   async checkOrtInstallation(): Promise<boolean> {

@@ -70,6 +70,12 @@
         "title": "Setup Wizard",
         "category": "ORT Insight",
         "icon": "$(gear)"
+      },
+      {
+        "command": "ort-insight.generateReport",
+        "title": "Generate ORT HTML Report",
+        "category": "ORT Insight",
+        "icon": "$(file-media)"
       }
     ],
     "viewsContainers": {
@@ -129,6 +135,9 @@
         },
         {
           "command": "ort-insight.showSetup"
+        },
+        {
+          "command": "ort-insight.generateReport"
         }
       ]
     },

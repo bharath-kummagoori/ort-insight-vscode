@@ -157,6 +157,13 @@ function registerCommands(context: vscode.ExtensionContext) {
       setupWizard.show();
     })
   );
+
+  // Generate ORT HTML Report
+  context.subscriptions.push(
+    vscode.commands.registerCommand('ort-insight.generateReport', async () => {
+      await generateReport();
+    })
+  );
 }
 
 /**
@@ -287,6 +294,62 @@ async function generateSBOM() {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     vscode.window.showErrorMessage(`SBOM generation failed: ${message}`);
+  }
+}
+
+/**
+ * Generate ORT's native HTML report
+ */
+async function generateReport() {
+  const workspaceFolder = await getWorkspaceFolder();
+  if (!workspaceFolder) {
+    return;
+  }
+
+  const resultFile = ORTWrapper.findLatestResult(workspaceFolder);
+  if (!resultFile) {
+    vscode.window.showWarningMessage('No ORT results found. Please run ORT Analyzer first.');
+    return;
+  }
+
+  const format = await vscode.window.showQuickPick(
+    [
+      { label: 'StaticHTML', description: 'Single-file HTML report with full details' },
+      { label: 'WebApp', description: 'Interactive web application with filtering and search' }
+    ],
+    {
+      placeHolder: 'Select ORT report format',
+      title: 'Generate ORT HTML Report'
+    }
+  );
+
+  if (!format) {
+    return;
+  }
+
+  try {
+    vscode.window.showInformationMessage(`Generating ORT ${format.label} report... This may take a minute.`);
+
+    const reportFile = await ortWrapper.generateReport(
+      resultFile,
+      format.label as 'StaticHTML' | 'WebApp'
+    );
+
+    const action = await vscode.window.showInformationMessage(
+      `ORT ${format.label} report generated!`,
+      'Open in Browser',
+      'Open in Editor'
+    );
+
+    if (action === 'Open in Browser') {
+      vscode.env.openExternal(vscode.Uri.file(reportFile));
+    } else if (action === 'Open in Editor') {
+      const doc = await vscode.workspace.openTextDocument(reportFile);
+      await vscode.window.showTextDocument(doc);
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    vscode.window.showErrorMessage(`Report generation failed: ${message}`);
   }
 }
 
