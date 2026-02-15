@@ -55,6 +55,17 @@ export class ORTWrapper {
       return resultFile;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+
+      // If the result file was written before timeout/error, treat as success
+      if (fs.existsSync(resultFile)) {
+        const stats = fs.statSync(resultFile);
+        if (stats.size > 100) {
+          this.outputChannel.appendLine('');
+          this.outputChannel.appendLine('ORT Analyzer completed (result file found despite process error).');
+          return resultFile;
+        }
+      }
+
       this.outputChannel.appendLine('');
       this.outputChannel.appendLine(`ERROR: ${message}`);
       throw new Error(`ORT Analyzer failed: ${message}`);

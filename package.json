@@ -151,8 +151,8 @@
         },
         "ortInsight.timeout": {
           "type": "number",
-          "default": 600000,
-          "description": "Timeout for ORT analysis in milliseconds (default: 10 minutes)"
+          "default": 900000,
+          "description": "Timeout for ORT commands in milliseconds (default: 15 minutes)"
         },
         "ortInsight.sbomFormat": {
           "type": "string",
