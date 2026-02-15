@@ -9,6 +9,7 @@
     "url": "https://github.com/bharath-kummagoori/ort-insight-vscode"
   },
   "license": "MIT",
+  "icon": "resources/icon.png",
   "engines": {
     "vscode": "^1.85.0"
   },
