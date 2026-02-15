@@ -13,3 +13,6 @@ tsconfig.json
 .eslintrc.json
 .gitignore
 package-lock.json
+CHANGELOG.md
+.github/**
+**/.DS_Store
