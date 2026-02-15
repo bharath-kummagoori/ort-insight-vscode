@@ -1,0 +1,160 @@
+# ORT License Classifications Template
+# This file categorizes licenses into groups that can be referenced by policy rules.
+# Customize the categories and categorizations to match your organization's compliance requirements.
+#
+# Usage: ORT Insight > Evaluate Policies (or Ctrl+Shift+P > "ORT Insight: Evaluate Policies")
+#
+# Documentation: https://oss-review-toolkit.org/ort/docs/configuration/license-classifications
+
+---
+
+categories:
+  - name: "permissive"
+    description: "Licenses with permissive obligations that allow proprietary use."
+  - name: "public-domain"
+    description: "Licenses that release work into the public domain."
+  - name: "copyleft"
+    description: "Licenses with strong reciprocal (copyleft) obligations."
+  - name: "strong-copyleft"
+    description: "Licenses with the strongest copyleft requirements (e.g., GPL)."
+  - name: "copyleft-limited"
+    description: "Licenses with limited copyleft obligations (e.g., LGPL, MPL)."
+  - name: "include-in-notice-file"
+    description: "Licenses that require attribution in a NOTICE or THIRD-PARTY file."
+  - name: "commercial-restricted"
+    description: "Licenses that restrict commercial use."
+
+categorizations:
+  # === Permissive Licenses ===
+  - id: "MIT"
+    categories:
+      - "permissive"
+      - "include-in-notice-file"
+  - id: "Apache-2.0"
+    categories:
+      - "permissive"
+      - "include-in-notice-file"
+  - id: "BSD-2-Clause"
+    categories:
+      - "permissive"
+      - "include-in-notice-file"
+  - id: "BSD-3-Clause"
+    categories:
+      - "permissive"
+      - "include-in-notice-file"
+  - id: "ISC"
+    categories:
+      - "permissive"
+      - "include-in-notice-file"
+  - id: "0BSD"
+    categories:
+      - "permissive"
+  - id: "Unlicense"
+    categories:
+      - "permissive"
+      - "public-domain"
+  - id: "CC0-1.0"
+    categories:
+      - "public-domain"
+  - id: "BSL-1.0"
+    categories:
+      - "permissive"
+      - "include-in-notice-file"
+  - id: "Zlib"
+    categories:
+      - "permissive"
+      - "include-in-notice-file"
+  - id: "PSF-2.0"
+    categories:
+      - "permissive"
+      - "include-in-notice-file"
+  - id: "X11"
+    categories:
+      - "permissive"
+      - "include-in-notice-file"
+
+  # === Strong Copyleft Licenses ===
+  - id: "GPL-2.0-only"
+    categories:
+      - "copyleft"
+      - "strong-copyleft"
+      - "include-in-notice-file"
+  - id: "GPL-2.0-or-later"
+    categories:
+      - "copyleft"
+      - "strong-copyleft"
+      - "include-in-notice-file"
+  - id: "GPL-3.0-only"
+    categories:
+      - "copyleft"
+      - "strong-copyleft"
+      - "include-in-notice-file"
+  - id: "GPL-3.0-or-later"
+    categories:
+      - "copyleft"
+      - "strong-copyleft"
+      - "include-in-notice-file"
+  - id: "AGPL-3.0-only"
+    categories:
+      - "copyleft"
+      - "strong-copyleft"
+      - "include-in-notice-file"
+  - id: "AGPL-3.0-or-later"
+    categories:
+      - "copyleft"
+      - "strong-copyleft"
+      - "include-in-notice-file"
+
+  # === Limited Copyleft Licenses ===
+  - id: "LGPL-2.0-only"
+    categories:
+      - "copyleft-limited"
+      - "include-in-notice-file"
+  - id: "LGPL-2.1-only"
+    categories:
+      - "copyleft-limited"
+      - "include-in-notice-file"
+  - id: "LGPL-2.1-or-later"
+    categories:
+      - "copyleft-limited"
+      - "include-in-notice-file"
+  - id: "LGPL-3.0-only"
+    categories:
+      - "copyleft-limited"
+      - "include-in-notice-file"
+  - id: "LGPL-3.0-or-later"
+    categories:
+      - "copyleft-limited"
+      - "include-in-notice-file"
+  - id: "MPL-2.0"
+    categories:
+      - "copyleft-limited"
+      - "include-in-notice-file"
+  - id: "EPL-1.0"
+    categories:
+      - "copyleft-limited"
+      - "include-in-notice-file"
+  - id: "EPL-2.0"
+    categories:
+      - "copyleft-limited"
+      - "include-in-notice-file"
+  - id: "CDDL-1.0"
+    categories:
+      - "copyleft-limited"
+      - "include-in-notice-file"
+  - id: "CDDL-1.1"
+    categories:
+      - "copyleft-limited"
+      - "include-in-notice-file"
+
+  # === Commercial Restricted ===
+  - id: "CC-BY-NC-4.0"
+    categories:
+      - "commercial-restricted"
+  - id: "CC-BY-NC-SA-4.0"
+    categories:
+      - "commercial-restricted"
+      - "copyleft"
+  - id: "CC-BY-NC-ND-4.0"
+    categories:
+      - "commercial-restricted"

@@ -13,6 +13,7 @@ Integrate the [OSS Review Toolkit (ORT)](https://github.com/oss-review-toolkit/o
 - **Vulnerability Advisories** -- Query the OSV vulnerability database through ORT Advisor and view CVE details, severity ratings, and references.
 - **Inline Diagnostics** -- See real-time warnings on import statements when a dependency has a problematic license.
 - **Status Bar Integration** -- A persistent status bar item shows your current compliance posture and provides one-click access to the dashboard.
+- **Policy Evaluation** -- Run ORT's Evaluator engine with customizable Kotlin-based policy rules to enforce license compliance, flag copyleft dependencies, detect missing licenses, and report policy violations with severity levels and remediation guidance.
 - **Setup Wizard** -- A guided first-run experience that auto-detects Java and ORT installations across Windows, macOS, and Linux.
 
 ## Prerequisites
@@ -76,6 +77,8 @@ All commands are available through the Command Palette under the **ORT Insight**
 | ORT Insight: Check Vulnerability Advisories | Run ORT Advisor against the OSV database |
 | ORT Insight: Refresh Dependency Tree | Reload analysis results into the tree view |
 | ORT Insight: Clear ORT Cache | Remove cached analysis data from the workspace |
+| ORT Insight: Evaluate Policies | Run policy rules against analysis results |
+| ORT Insight: Initialize Policy Rules Templates | Create customizable policy rule templates in your workspace |
 | ORT Insight: Setup Wizard | Open the guided setup and environment check |
 
 ## Configuration
@@ -91,6 +94,8 @@ Configure ORT Insight under **Settings > Extensions > ORT Insight**, or edit `se
 | `ortInsight.weakCopyleftLicenses` | array | `["LGPL-2.0", "LGPL-2.1", "LGPL-3.0", "MPL-1.1", "MPL-2.0", "EPL-1.0", "EPL-2.0"]` | Licenses classified as weak copyleft (yellow). |
 | `ortInsight.strongCopyleftLicenses` | array | `["GPL-2.0", "GPL-3.0", "AGPL-3.0"]` | Licenses classified as strong copyleft (red). |
 | `ortInsight.enableDiagnostics` | boolean | `true` | Enable inline diagnostics for problematic licenses in source files. |
+| `ortInsight.policyRulesFile` | string | `""` | Path to custom evaluator rules file (`.rules.kts`). Leave empty to use `.ort-config/evaluator.rules.kts`. |
+| `ortInsight.licenseClassificationsFile` | string | `""` | Path to custom license classifications file (`.yml`). Leave empty to use `.ort-config/license-classifications.yml`. |
 
 ## Supported Package Managers
 

@@ -78,6 +78,18 @@
         "title": "Generate ORT HTML Report",
         "category": "ORT Insight",
         "icon": "$(file-media)"
+      },
+      {
+        "command": "ort-insight.evaluatePolicy",
+        "title": "Evaluate Policies",
+        "category": "ORT Insight",
+        "icon": "$(law)"
+      },
+      {
+        "command": "ort-insight.initPolicyRules",
+        "title": "Initialize Policy Rules Templates",
+        "category": "ORT Insight",
+        "icon": "$(file-add)"
       }
     ],
     "viewsContainers": {
@@ -140,6 +152,12 @@
         },
         {
           "command": "ort-insight.generateReport"
+        },
+        {
+          "command": "ort-insight.evaluatePolicy"
+        },
+        {
+          "command": "ort-insight.initPolicyRules"
         }
       ]
     },
@@ -203,6 +221,16 @@
           "type": "boolean",
           "default": true,
           "description": "Enable inline diagnostics for problematic licenses"
+        },
+        "ortInsight.policyRulesFile": {
+          "type": "string",
+          "default": "",
+          "description": "Path to custom ORT evaluator rules file (.rules.kts). Leave empty to use .ort-config/evaluator.rules.kts in workspace."
+        },
+        "ortInsight.licenseClassificationsFile": {
+          "type": "string",
+          "default": "",
+          "description": "Path to custom license classifications file (.yml). Leave empty to use .ort-config/license-classifications.yml in workspace."
         }
       }
     }

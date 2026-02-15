@@ -6,7 +6,7 @@ node_modules/**
 .stash*/**
 .git/**
 docs/**
-**/*.ts
+src/**/*.ts
 **/*.map
 esbuild.js
 tsconfig.json

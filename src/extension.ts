@@ -167,6 +167,20 @@ function registerCommands(context: vscode.ExtensionContext) {
       await generateReport();
     })
   );
+
+  // Evaluate Policies
+  context.subscriptions.push(
+    vscode.commands.registerCommand('ort-insight.evaluatePolicy', async () => {
+      await evaluatePolicy(context);
+    })
+  );
+
+  // Initialize Policy Rules (create template files)
+  context.subscriptions.push(
+    vscode.commands.registerCommand('ort-insight.initPolicyRules', async () => {
+      await initPolicyRules(context);
+    })
+  );
 }
 
 /**
@@ -376,6 +390,418 @@ async function generateReport() {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     vscode.window.showErrorMessage(`Report generation failed: ${message}`);
+  }
+}
+
+/**
+ * Evaluate Policy Rules using ORT Evaluator
+ */
+async function evaluatePolicy(context: vscode.ExtensionContext) {
+  const workspaceFolder = await getWorkspaceFolder();
+  if (!workspaceFolder) {
+    return;
+  }
+
+  const resultFile = ORTWrapper.findLatestResult(workspaceFolder);
+  if (!resultFile) {
+    vscode.window.showWarningMessage('No ORT results found. Please run ORT Analyzer first.');
+    return;
+  }
+
+  // Check for policy files in workspace
+  const ortConfigDir = path.join(workspaceFolder.uri.fsPath, '.ort-config');
+  const rulesFile = path.join(ortConfigDir, 'evaluator.rules.kts');
+  const licenseClassFile = path.join(ortConfigDir, 'license-classifications.yml');
+
+  // Check if policy files exist
+  const hasRulesFile = fs.existsSync(rulesFile);
+  const hasLicenseClassFile = fs.existsSync(licenseClassFile);
+
+  if (!hasRulesFile || !hasLicenseClassFile) {
+    const action = await vscode.window.showWarningMessage(
+      'Policy rules not found in .ort-config/ directory. Would you like to create template files?',
+      'Create Templates',
+      'Browse for Files',
+      'Run Without Rules'
+    );
+
+    if (action === 'Create Templates') {
+      await initPolicyRules(context);
+      vscode.window.showInformationMessage(
+        'Policy templates created in .ort-config/ folder. Customize them, then run Evaluate Policies again.'
+      );
+      return;
+    } else if (action === 'Browse for Files') {
+      // Let user pick rules file
+      const selectedFiles = await vscode.window.showOpenDialog({
+        canSelectMany: false,
+        filters: { 'Rules File': ['kts'] },
+        openLabel: 'Select Rules File (.rules.kts)',
+        title: 'Select ORT Evaluator Rules File'
+      });
+
+      if (!selectedFiles || selectedFiles.length === 0) {
+        return;
+      }
+
+      // Run with user-selected file
+      try {
+        vscode.window.showInformationMessage('Running ORT Policy Evaluator...');
+        const evalResult = await ortWrapper.runEvaluator(
+          resultFile,
+          selectedFiles[0].fsPath,
+          undefined
+        );
+
+        if (evalResult) {
+          await showEvaluatorResults(evalResult);
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        vscode.window.showErrorMessage(`Policy evaluation failed: ${message}`);
+      }
+      return;
+    } else if (action !== 'Run Without Rules') {
+      return;
+    }
+  }
+
+  // Run the evaluator
+  try {
+    vscode.window.showInformationMessage('Running ORT Policy Evaluator... This may take a minute.');
+
+    const evalResult = await ortWrapper.runEvaluator(
+      resultFile,
+      hasRulesFile ? rulesFile : undefined,
+      hasLicenseClassFile ? licenseClassFile : undefined
+    );
+
+    if (evalResult) {
+      await showEvaluatorResults(evalResult);
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const action = await vscode.window.showErrorMessage(
+      `Policy evaluation failed: ${message}`,
+      'Show Output',
+      'Create Templates'
+    );
+    if (action === 'Show Output') { outputChannel.show(); }
+    else if (action === 'Create Templates') { await initPolicyRules(context); }
+  }
+}
+
+/**
+ * Show evaluator results in a webview panel
+ */
+async function showEvaluatorResults(evalResultFile: string) {
+  try {
+    const content = fs.readFileSync(evalResultFile, 'utf-8');
+    const evalData = JSON.parse(content);
+
+    // Extract violations from evaluator result
+    const violations: Array<{
+      rule: string;
+      pkg: string;
+      license: string;
+      severity: string;
+      message: string;
+      howToFix: string;
+    }> = [];
+
+    // ORT evaluator result structure: evaluator.violations[]
+    const evaluator = evalData.evaluator || {};
+    const rawViolations = evaluator.violations || [];
+
+    for (const v of rawViolations) {
+      violations.push({
+        rule: v.rule || 'Unknown',
+        pkg: v.pkg || v.packageId || 'Unknown',
+        license: v.license || v.licenseId || '',
+        severity: v.severity || 'ERROR',
+        message: v.message || '',
+        howToFix: v.howToFix || ''
+      });
+    }
+
+    // Create webview panel to show results
+    const panel = vscode.window.createWebviewPanel(
+      'policyResults',
+      'ORT Policy Evaluation Results',
+      vscode.ViewColumn.One,
+      { enableScripts: true }
+    );
+
+    const errors = violations.filter(v => v.severity === 'ERROR');
+    const warnings = violations.filter(v => v.severity === 'WARNING');
+    const hints = violations.filter(v => v.severity === 'HINT');
+
+    panel.webview.html = getPolicyResultsHtml(violations, errors.length, warnings.length, hints.length);
+
+    // Also show summary notification
+    if (violations.length === 0) {
+      vscode.window.showInformationMessage(
+        'Policy Evaluation: No violations found! All dependencies are compliant.'
+      );
+    } else {
+      vscode.window.showWarningMessage(
+        `Policy Evaluation: ${errors.length} error(s), ${warnings.length} warning(s), ${hints.length} hint(s) found.`,
+        'View Results'
+      ).then(action => {
+        if (action === 'View Results') {
+          panel.reveal();
+        }
+      });
+    }
+  } catch (error) {
+    // If JSON parsing fails, open the raw file
+    const doc = await vscode.workspace.openTextDocument(evalResultFile);
+    await vscode.window.showTextDocument(doc);
+  }
+}
+
+/**
+ * Generate HTML for policy evaluation results
+ */
+function getPolicyResultsHtml(
+  violations: Array<{ rule: string; pkg: string; license: string; severity: string; message: string; howToFix: string }>,
+  errorCount: number,
+  warningCount: number,
+  hintCount: number
+): string {
+  const violationRows = violations.map(v => {
+    const severityClass = v.severity === 'ERROR' ? 'error' : v.severity === 'WARNING' ? 'warning' : 'hint';
+    const severityIcon = v.severity === 'ERROR' ? '&#10060;' : v.severity === 'WARNING' ? '&#9888;' : '&#8505;';
+    return `
+      <tr class="${severityClass}">
+        <td>${severityIcon} ${v.severity}</td>
+        <td title="${v.pkg}">${v.pkg.length > 50 ? v.pkg.substring(0, 50) + '...' : v.pkg}</td>
+        <td>${v.license}</td>
+        <td>${v.rule}</td>
+        <td>${v.message}</td>
+        <td class="howtofix">${v.howToFix}</td>
+      </tr>`;
+  }).join('');
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>ORT Policy Evaluation Results</title>
+  <style>
+    body {
+      font-family: var(--vscode-font-family);
+      color: var(--vscode-foreground);
+      background-color: var(--vscode-editor-background);
+      padding: 20px;
+      margin: 0;
+    }
+    h1 { margin-bottom: 5px; }
+    .summary {
+      display: flex;
+      gap: 20px;
+      margin: 20px 0;
+      flex-wrap: wrap;
+    }
+    .summary-card {
+      padding: 15px 25px;
+      border-radius: 8px;
+      text-align: center;
+      min-width: 120px;
+    }
+    .summary-card.errors { background: rgba(220, 53, 69, 0.2); border: 1px solid rgba(220, 53, 69, 0.5); }
+    .summary-card.warnings { background: rgba(255, 193, 7, 0.2); border: 1px solid rgba(255, 193, 7, 0.5); }
+    .summary-card.hints { background: rgba(23, 162, 184, 0.2); border: 1px solid rgba(23, 162, 184, 0.5); }
+    .summary-card.pass { background: rgba(40, 167, 69, 0.2); border: 1px solid rgba(40, 167, 69, 0.5); }
+    .summary-card .count { font-size: 32px; font-weight: bold; }
+    .summary-card .label { font-size: 12px; opacity: 0.8; text-transform: uppercase; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+      font-size: 13px;
+    }
+    th {
+      background: var(--vscode-editor-selectionBackground);
+      padding: 10px 12px;
+      text-align: left;
+      font-weight: bold;
+      position: sticky;
+      top: 0;
+    }
+    td {
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--vscode-panel-border);
+      vertical-align: top;
+    }
+    tr.error td:first-child { color: #dc3545; font-weight: bold; }
+    tr.warning td:first-child { color: #ffc107; font-weight: bold; }
+    tr.hint td:first-child { color: #17a2b8; }
+    .howtofix { font-style: italic; opacity: 0.8; font-size: 12px; }
+    .no-violations {
+      text-align: center;
+      padding: 60px 20px;
+      font-size: 18px;
+    }
+    .no-violations .checkmark { font-size: 64px; margin-bottom: 15px; }
+    .filter-bar {
+      margin: 15px 0;
+      display: flex;
+      gap: 10px;
+    }
+    .filter-btn {
+      padding: 6px 14px;
+      border: 1px solid var(--vscode-panel-border);
+      background: transparent;
+      color: var(--vscode-foreground);
+      cursor: pointer;
+      border-radius: 4px;
+      font-size: 12px;
+    }
+    .filter-btn:hover, .filter-btn.active {
+      background: var(--vscode-button-background);
+      color: var(--vscode-button-foreground);
+    }
+  </style>
+</head>
+<body>
+  <h1>&#128220; ORT Policy Evaluation Results</h1>
+  <p style="opacity:0.7">Powered by ORT Evaluator</p>
+
+  <div class="summary">
+    ${errorCount > 0 ? `<div class="summary-card errors"><div class="count">${errorCount}</div><div class="label">Errors</div></div>` : ''}
+    ${warningCount > 0 ? `<div class="summary-card warnings"><div class="count">${warningCount}</div><div class="label">Warnings</div></div>` : ''}
+    ${hintCount > 0 ? `<div class="summary-card hints"><div class="count">${hintCount}</div><div class="label">Hints</div></div>` : ''}
+    ${violations.length === 0 ? `<div class="summary-card pass"><div class="count">&#10004;</div><div class="label">All Clear</div></div>` : ''}
+  </div>
+
+  ${violations.length === 0 ? `
+    <div class="no-violations">
+      <div class="checkmark">&#9989;</div>
+      <div>No policy violations found!</div>
+      <div style="opacity:0.6;margin-top:10px;">All dependencies comply with your policy rules.</div>
+    </div>
+  ` : `
+    <div class="filter-bar">
+      <button class="filter-btn active" onclick="filterRows('all')">All (${violations.length})</button>
+      ${errorCount > 0 ? `<button class="filter-btn" onclick="filterRows('error')">Errors (${errorCount})</button>` : ''}
+      ${warningCount > 0 ? `<button class="filter-btn" onclick="filterRows('warning')">Warnings (${warningCount})</button>` : ''}
+      ${hintCount > 0 ? `<button class="filter-btn" onclick="filterRows('hint')">Hints (${hintCount})</button>` : ''}
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Severity</th>
+          <th>Package</th>
+          <th>License</th>
+          <th>Rule</th>
+          <th>Message</th>
+          <th>How to Fix</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${violationRows}
+      </tbody>
+    </table>
+  `}
+
+  <script>
+    function filterRows(type) {
+      const rows = document.querySelectorAll('tbody tr');
+      const btns = document.querySelectorAll('.filter-btn');
+      btns.forEach(b => b.classList.remove('active'));
+      event.target.classList.add('active');
+      rows.forEach(row => {
+        if (type === 'all') {
+          row.style.display = '';
+        } else {
+          row.style.display = row.classList.contains(type) ? '' : 'none';
+        }
+      });
+    }
+  </script>
+</body>
+</html>`;
+}
+
+/**
+ * Initialize policy rules templates in workspace
+ */
+async function initPolicyRules(context: vscode.ExtensionContext) {
+  const workspaceFolder = await getWorkspaceFolder();
+  if (!workspaceFolder) {
+    return;
+  }
+
+  const ortConfigDir = path.join(workspaceFolder.uri.fsPath, '.ort-config');
+
+  // Create .ort-config directory
+  if (!fs.existsSync(ortConfigDir)) {
+    fs.mkdirSync(ortConfigDir, { recursive: true });
+  }
+
+  // Copy template files from extension resources
+  const templatesDir = path.join(context.extensionPath, 'resources', 'templates');
+
+  const rulesTarget = path.join(ortConfigDir, 'evaluator.rules.kts');
+  const licenseTarget = path.join(ortConfigDir, 'license-classifications.yml');
+
+  let filesCreated = 0;
+
+  if (!fs.existsSync(rulesTarget)) {
+    const rulesTemplate = path.join(templatesDir, 'evaluator.rules.kts');
+    if (fs.existsSync(rulesTemplate)) {
+      fs.copyFileSync(rulesTemplate, rulesTarget);
+    } else {
+      // Fallback: write a minimal template
+      fs.writeFileSync(rulesTarget, '// ORT Evaluator Rules\n// See: https://oss-review-toolkit.org/ort/docs/configuration/evaluator-rules\n\n' +
+        'val permissiveLicenses = licenseClassifications.licensesByCategory["permissive"].orEmpty()\n\n' +
+        'packageRule("FLAG_COPYLEFT") {\n' +
+        '    require {\n' +
+        '        -isExcluded()\n' +
+        '    }\n' +
+        '    licenseRule("COPYLEFT_IN_DEPENDENCY", LicenseView.CONCLUDED_OR_DECLARED_AND_DETECTED) {\n' +
+        '        require {\n' +
+        '            +isCategorized("copyleft")\n' +
+        '        }\n' +
+        '        error(\n' +
+        '            "Package uses a copyleft license: ${license.simpleLicense()}",\n' +
+        '            "Review if this dependency can be replaced."\n' +
+        '        )\n' +
+        '    }\n' +
+        '}\n');
+    }
+    filesCreated++;
+  }
+
+  if (!fs.existsSync(licenseTarget)) {
+    const licenseTemplate = path.join(templatesDir, 'license-classifications.yml');
+    if (fs.existsSync(licenseTemplate)) {
+      fs.copyFileSync(licenseTemplate, licenseTarget);
+    } else {
+      // Fallback: write a minimal template
+      fs.writeFileSync(licenseTarget, '---\ncategories:\n  - name: "permissive"\n    description: "Permissive licenses"\n  - name: "copyleft"\n    description: "Copyleft licenses"\n\ncategorizations:\n  - id: "MIT"\n    categories: ["permissive"]\n  - id: "Apache-2.0"\n    categories: ["permissive"]\n  - id: "GPL-3.0-only"\n    categories: ["copyleft"]\n');
+    }
+    filesCreated++;
+  }
+
+  if (filesCreated > 0) {
+    const action = await vscode.window.showInformationMessage(
+      `Created ${filesCreated} policy template(s) in .ort-config/ folder. Customize them for your project.`,
+      'Open Rules File',
+      'Open License Classifications'
+    );
+
+    if (action === 'Open Rules File') {
+      const doc = await vscode.workspace.openTextDocument(rulesTarget);
+      await vscode.window.showTextDocument(doc);
+    } else if (action === 'Open License Classifications') {
+      const doc = await vscode.workspace.openTextDocument(licenseTarget);
+      await vscode.window.showTextDocument(doc);
+    }
+  } else {
+    vscode.window.showInformationMessage('Policy templates already exist in .ort-config/ folder.');
   }
 }
 

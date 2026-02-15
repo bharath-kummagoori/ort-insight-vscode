@@ -245,6 +245,111 @@ export class ORTWrapper {
   }
 
   /**
+   * Run ORT Evaluator to check policy compliance
+   */
+  async runEvaluator(
+    analyzerResultFile: string,
+    rulesFile?: string,
+    licenseClassificationsFile?: string
+  ): Promise<string> {
+    const config = vscode.workspace.getConfiguration('ortInsight');
+    const ortPath = config.get<string>('ortPath', 'ort');
+    const timeout = config.get<number>('timeout', 600000);
+
+    const outputDir = path.join(path.dirname(analyzerResultFile), 'evaluator');
+
+    // Clean old evaluator output to avoid "output files must not exist" error
+    if (fs.existsSync(outputDir)) {
+      fs.rmSync(outputDir, { recursive: true, force: true });
+    }
+    fs.mkdirSync(outputDir, { recursive: true });
+
+    const resultFile = path.join(outputDir, 'evaluation-result.json');
+
+    this.outputChannel.appendLine('');
+    this.outputChannel.appendLine('Starting ORT Evaluator (Policy Rules Engine)...');
+    if (rulesFile) {
+      this.outputChannel.appendLine(`Rules file: ${rulesFile}`);
+    }
+    if (licenseClassificationsFile) {
+      this.outputChannel.appendLine(`License classifications: ${licenseClassificationsFile}`);
+    }
+    this.outputChannel.appendLine('');
+
+    const args = [
+      'evaluate',
+      '-i', analyzerResultFile,
+      '-o', outputDir,
+      '-f', 'JSON'
+    ];
+
+    // Add rules file if provided
+    if (rulesFile) {
+      args.push('--rules-file', rulesFile);
+    }
+
+    // Add license classifications file if provided
+    if (licenseClassificationsFile) {
+      args.push('--license-classifications-file', licenseClassificationsFile);
+    }
+
+    try {
+      await this.executeCommand(ortPath, args, outputDir, timeout);
+
+      this.outputChannel.appendLine('');
+      this.outputChannel.appendLine('ORT Evaluator completed successfully!');
+
+      // Find the generated result file
+      if (fs.existsSync(resultFile)) {
+        return resultFile;
+      }
+
+      // ORT may name it differently — look for any JSON result
+      const files = fs.readdirSync(outputDir);
+      const jsonFile = files.find(f => f.endsWith('.json'));
+      if (jsonFile) {
+        const foundFile = path.join(outputDir, jsonFile);
+        this.outputChannel.appendLine(`Evaluator result: ${foundFile}`);
+        return foundFile;
+      }
+
+      return resultFile;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+
+      // If the result file was written before error, treat as success
+      // (evaluator may exit non-zero when violations are found)
+      if (fs.existsSync(resultFile)) {
+        const stats = fs.statSync(resultFile);
+        if (stats.size > 100) {
+          this.outputChannel.appendLine('');
+          this.outputChannel.appendLine('ORT Evaluator completed with policy violations found.');
+          return resultFile;
+        }
+      }
+
+      // Also check for any JSON file in output dir
+      if (fs.existsSync(outputDir)) {
+        const files = fs.readdirSync(outputDir);
+        const jsonFile = files.find(f => f.endsWith('.json'));
+        if (jsonFile) {
+          const foundFile = path.join(outputDir, jsonFile);
+          const stats = fs.statSync(foundFile);
+          if (stats.size > 100) {
+            this.outputChannel.appendLine('');
+            this.outputChannel.appendLine('ORT Evaluator completed with policy violations found.');
+            return foundFile;
+          }
+        }
+      }
+
+      this.outputChannel.appendLine('');
+      this.outputChannel.appendLine(`ERROR: ORT Evaluator failed: ${message}`);
+      throw new Error(`ORT Evaluator failed: ${message}`);
+    }
+  }
+
+  /**
    * Check if ORT is installed and available
    */
   async checkOrtInstallation(): Promise<boolean> {
