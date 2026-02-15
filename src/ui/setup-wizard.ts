@@ -406,7 +406,7 @@ export class SetupWizard {
     <div class="card ${status.ort.installed ? 'ready' : 'missing'}">
       <h2>
         <span class="status-icon ${status.ort.installed ? 'ok' : 'fail'}">${status.ort.installed ? '&#10003;' : '&#10007;'}</span>
-        ORT ${status.ort.installed ? '(Found)' : '(Not Found)'}
+        ORT ${status.ort.installed ? (status.ort.version ? 'v' + status.ort.version : '(Found)') : '(Not Found)'}
       </h2>
       ${status.ort.installed ? `
         <p class="detail"><strong>Path:</strong> ${this.escapeHtml(status.ort.path || 'In PATH')}</p>

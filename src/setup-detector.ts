@@ -96,6 +96,34 @@ export class SetupDetector {
   }
 
   /**
+   * Try to get ORT version from the executable
+   */
+  static getOrtVersion(ortPath: string): string | undefined {
+    try {
+      // Set up JAVA_HOME for the version check
+      const env = { ...process.env };
+      if (!env.JAVA_HOME) {
+        const java = SetupDetector.detectJava();
+        if (java.javaHome) {
+          env.JAVA_HOME = java.javaHome;
+          const pathSep = process.platform === 'win32' ? ';' : ':';
+          env.PATH = `${java.javaHome}${pathSep}bin${pathSep}${env.PATH || ''}`;
+        }
+      }
+
+      const output = child_process.execSync(`"${ortPath}" --version 2>&1`, {
+        timeout: 30000,
+        encoding: 'utf-8',
+        env
+      });
+      const match = output.match(/version\s+(\d+\.\d+\.\d+)/);
+      return match ? match[1] : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  /**
    * Detect ORT installation
    */
   static detectOrt(): SetupStatus['ort'] {
@@ -104,7 +132,7 @@ export class SetupDetector {
     if (ortInPath) {
       return {
         installed: true,
-        version: undefined,
+        version: SetupDetector.getOrtVersion(ortInPath),
         path: ortInPath
       };
     }
@@ -115,7 +143,7 @@ export class SetupDetector {
       if (fs.existsSync(ortPath)) {
         return {
           installed: true,
-          version: undefined,
+          version: SetupDetector.getOrtVersion(ortPath),
           path: ortPath
         };
       }

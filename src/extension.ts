@@ -5,6 +5,9 @@
  */
 
 import * as vscode from 'vscode';
+import * as child_process from 'child_process';
+import * as fs from 'fs';
+import * as path from 'path';
 import { ORTWrapper } from './ort-wrapper';
 import { DependencyTreeProvider } from './ui/dependency-tree-provider';
 import { VulnerabilityTreeProvider } from './ui/vulnerability-tree-provider';
@@ -201,6 +204,29 @@ async function runAnalyzer() {
     if (action === 'Open Setup Wizard') { setupWizard.show(); }
     else if (action === 'Download Java 21') { vscode.env.openExternal(vscode.Uri.parse('https://adoptium.net/temurin/releases/?version=21')); }
     return;
+  }
+
+  // Pre-flight check: warn if not a git repository
+  const gitDir = path.join(workspaceFolder.uri.fsPath, '.git');
+  if (!fs.existsSync(gitDir)) {
+    const action = await vscode.window.showWarningMessage(
+      'This folder is not a git repository. ORT works best with git-initialized projects.',
+      'Initialize Git & Continue',
+      'Continue Anyway',
+      'Cancel'
+    );
+    if (action === 'Initialize Git & Continue') {
+      try {
+        child_process.execSync('git init', { cwd: workspaceFolder.uri.fsPath });
+        child_process.execSync('git add -A', { cwd: workspaceFolder.uri.fsPath });
+        child_process.execSync('git commit -m "Initial commit for ORT analysis" --allow-empty', { cwd: workspaceFolder.uri.fsPath });
+        outputChannel.appendLine('Git repository initialized.');
+      } catch (e) {
+        outputChannel.appendLine(`Warning: Git init failed: ${e}`);
+      }
+    } else if (action === 'Cancel' || !action) {
+      return;
+    }
   }
 
   try {

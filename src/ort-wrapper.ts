@@ -128,6 +128,8 @@ export class ORTWrapper {
       const message = error instanceof Error ? error.message : String(error);
       this.outputChannel.appendLine('');
       this.outputChannel.appendLine(`WARNING: ORT Advisor failed: ${message}`);
+      this.outputChannel.appendLine('Note: The Advisor requires internet access to query the OSV vulnerability database.');
+      this.outputChannel.appendLine('If you are behind a proxy or firewall, vulnerability checking may not work.');
       // Don't throw - advisor is optional
       return '';
     }
@@ -323,7 +325,8 @@ export class ORTWrapper {
 
       const timeoutHandle = setTimeout(() => {
         childProcess.kill();
-        reject(new Error(`Command timed out after ${timeout}ms`));
+        const minutes = Math.round(timeout / 60000);
+        reject(new Error(`Command timed out after ${minutes} minute(s). For large projects, increase the timeout in Settings > ORT Insight > Timeout.`));
       }, timeout);
 
       childProcess.on('close', (code: number | null) => {
