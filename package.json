@@ -6,7 +6,7 @@
   "publisher": "ort-insight",
   "repository": {
     "type": "git",
-    "url": "https://github.com/ort-insight/ort-insight-vscode"
+    "url": ""
   },
   "engines": {
     "vscode": "^1.85.0"
