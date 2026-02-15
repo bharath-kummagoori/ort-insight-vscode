@@ -1,0 +1,191 @@
+{
+  "name": "ort-insight",
+  "displayName": "ORT Insight",
+  "description": "OSS Review Toolkit (ORT) integration for Visual Studio Code - License compliance, SBOM generation, and vulnerability analysis",
+  "version": "0.1.0",
+  "publisher": "ort-insight",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ort-insight/ort-insight-vscode"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Linters",
+    "Other"
+  ],
+  "keywords": [
+    "ort",
+    "oss",
+    "license",
+    "compliance",
+    "sbom",
+    "security",
+    "dependencies"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "ort-insight.analyze",
+        "title": "Run ORT Analyzer",
+        "category": "ORT Insight",
+        "icon": "$(search)"
+      },
+      {
+        "command": "ort-insight.showDashboard",
+        "title": "Show License Dashboard",
+        "category": "ORT Insight",
+        "icon": "$(dashboard)"
+      },
+      {
+        "command": "ort-insight.generateSBOM",
+        "title": "Generate SBOM",
+        "category": "ORT Insight",
+        "icon": "$(file-code)"
+      },
+      {
+        "command": "ort-insight.checkAdvisories",
+        "title": "Check Vulnerability Advisories",
+        "category": "ORT Insight",
+        "icon": "$(shield)"
+      },
+      {
+        "command": "ort-insight.refreshTree",
+        "title": "Refresh Dependency Tree",
+        "category": "ORT Insight",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "ort-insight.clearCache",
+        "title": "Clear ORT Cache",
+        "category": "ORT Insight"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "ort-insight",
+          "title": "ORT Insight",
+          "icon": "$(shield)"
+        }
+      ]
+    },
+    "views": {
+      "ort-insight": [
+        {
+          "id": "ort-insight.dependencyTree",
+          "name": "Dependencies",
+          "icon": "$(list-tree)"
+        },
+        {
+          "id": "ort-insight.vulnerabilities",
+          "name": "Vulnerabilities",
+          "icon": "$(warning)"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "ort-insight.dependencyTree",
+        "contents": "No ORT analysis results found.\n[Run ORT Analyzer](command:ort-insight.analyze)\nMake sure ORT is installed on your system."
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "ort-insight.refreshTree",
+          "when": "view == ort-insight.dependencyTree",
+          "group": "navigation"
+        },
+        {
+          "command": "ort-insight.showDashboard",
+          "when": "view == ort-insight.dependencyTree",
+          "group": "navigation"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "ort-insight.analyze"
+        },
+        {
+          "command": "ort-insight.showDashboard"
+        },
+        {
+          "command": "ort-insight.generateSBOM"
+        },
+        {
+          "command": "ort-insight.checkAdvisories"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "ORT Insight",
+      "properties": {
+        "ortInsight.ortPath": {
+          "type": "string",
+          "default": "ort",
+          "description": "Path to ORT executable. Defaults to 'ort' in PATH."
+        },
+        "ortInsight.timeout": {
+          "type": "number",
+          "default": 300000,
+          "description": "Timeout for ORT analysis in milliseconds (default: 5 minutes)"
+        },
+        "ortInsight.sbomFormat": {
+          "type": "string",
+          "enum": ["CycloneDX", "SPDX"],
+          "default": "CycloneDX",
+          "description": "Preferred SBOM format"
+        },
+        "ortInsight.permissiveLicenses": {
+          "type": "array",
+          "default": ["MIT", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "ISC", "0BSD"],
+          "description": "Licenses considered permissive (green)"
+        },
+        "ortInsight.weakCopyleftLicenses": {
+          "type": "array",
+          "default": ["LGPL-2.0", "LGPL-2.1", "LGPL-3.0", "MPL-1.1", "MPL-2.0", "EPL-1.0", "EPL-2.0"],
+          "description": "Licenses considered weak copyleft (yellow)"
+        },
+        "ortInsight.strongCopyleftLicenses": {
+          "type": "array",
+          "default": ["GPL-2.0", "GPL-3.0", "AGPL-3.0"],
+          "description": "Licenses considered strong copyleft (red)"
+        },
+        "ortInsight.enableDiagnostics": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable inline diagnostics for problematic licenses"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src --ext ts",
+    "test": "node ./out/test/runTest.js",
+    "typecheck": "tsc --noEmit",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "@types/node": "^20.x",
+    "@types/mocha": "^10.0.6",
+    "@typescript-eslint/eslint-plugin": "^6.15.0",
+    "@typescript-eslint/parser": "^6.15.0",
+    "@vscode/test-electron": "^2.3.8",
+    "eslint": "^8.56.0",
+    "mocha": "^10.2.0",
+    "typescript": "^5.3.3",
+    "@vscode/vsce": "^2.22.0"
+  },
+  "dependencies": {}
+}
