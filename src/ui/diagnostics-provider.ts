@@ -11,6 +11,8 @@ export class DiagnosticsProvider {
   private diagnosticCollection: vscode.DiagnosticCollection;
   private parser: ORTParser;
   private packageLicenseMap: Map<string, { license: string; risk: LicenseRisk }> = new Map();
+  private lastResultFile: string | undefined;
+  private lastResultMtime: number = 0;
 
   constructor() {
     this.diagnosticCollection = vscode.languages.createDiagnosticCollection('ort-insight');
@@ -24,9 +26,21 @@ export class DiagnosticsProvider {
     try {
       if (!fs.existsSync(resultFile)) {
         this.packageLicenseMap.clear();
+        this.lastResultFile = undefined;
+        this.lastResultMtime = 0;
         this.clearAll();
         return;
       }
+
+      // Only rebuild if the result file has changed
+      const stat = fs.statSync(resultFile);
+      const mtime = stat.mtimeMs;
+      if (resultFile === this.lastResultFile && mtime === this.lastResultMtime && this.packageLicenseMap.size > 0) {
+        return;
+      }
+
+      this.lastResultFile = resultFile;
+      this.lastResultMtime = mtime;
 
       const ortResult = this.parser.parseResultFile(resultFile);
       this.buildPackageLicenseMap(ortResult);
@@ -145,32 +159,39 @@ export class DiagnosticsProvider {
    */
   private extractImports(line: string): string[] {
     const imports: string[] = [];
+    const trimmed = line.trim();
 
     // JavaScript/TypeScript: import ... from 'package'
-    const esImportMatch = line.match(/from\s+['"]([^'"]+)['"]/);
+    const esImportMatch = trimmed.match(/\bimport\b[\s\S]+?\bfrom\s+['"]([^'"]+)['"]/);
     if (esImportMatch) {
-      imports.push(this.normalizePackageName(esImportMatch[1]));
+      const normalized = this.normalizePackageName(esImportMatch[1]);
+      if (normalized) {
+        imports.push(normalized);
+      }
     }
 
     // JavaScript/TypeScript: require('package')
-    const requireMatch = line.match(/require\s*\(\s*['"]([^'"]+)['"]\s*\)/);
+    const requireMatch = trimmed.match(/\brequire\s*\(\s*['"]([^'"]+)['"]\s*\)/);
     if (requireMatch) {
-      imports.push(this.normalizePackageName(requireMatch[1]));
+      const normalized = this.normalizePackageName(requireMatch[1]);
+      if (normalized) {
+        imports.push(normalized);
+      }
     }
 
-    // Python: import package or from package import
-    const pythonImportMatch = line.match(/^import\s+([a-zA-Z0-9_-]+)/);
+    // Python: import package or from package import (top-level name only)
+    const pythonImportMatch = trimmed.match(/^\s*import\s+([a-zA-Z_][a-zA-Z0-9_]*)\b/);
     if (pythonImportMatch) {
       imports.push(pythonImportMatch[1]);
     }
 
-    const pythonFromMatch = line.match(/^from\s+([a-zA-Z0-9_-]+)\s+import/);
+    const pythonFromMatch = trimmed.match(/^\s*from\s+([a-zA-Z_][a-zA-Z0-9_]*)\b\s+import\b/);
     if (pythonFromMatch) {
       imports.push(pythonFromMatch[1]);
     }
 
-    // Java: import package.name
-    const javaImportMatch = line.match(/^import\s+(?:static\s+)?([a-zA-Z0-9_.]+)/);
+    // Java: import package.name (extract group ID as first two segments)
+    const javaImportMatch = trimmed.match(/^\s*import\s+(?:static\s+)?([a-zA-Z_][a-zA-Z0-9_.]*)\s*;/);
     if (javaImportMatch) {
       const parts = javaImportMatch[1].split('.');
       if (parts.length >= 3) {

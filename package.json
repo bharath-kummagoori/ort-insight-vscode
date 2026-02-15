@@ -6,7 +6,7 @@
   "publisher": "ort-insight",
   "repository": {
     "type": "git",
-    "url": ""
+    "url": "https://github.com/bharath-kummagoori/ort-insight-vscode"
   },
   "engines": {
     "vscode": "^1.85.0"
@@ -64,6 +64,12 @@
         "command": "ort-insight.clearCache",
         "title": "Clear ORT Cache",
         "category": "ORT Insight"
+      },
+      {
+        "command": "ort-insight.showSetup",
+        "title": "Setup Wizard",
+        "category": "ORT Insight",
+        "icon": "$(gear)"
       }
     ],
     "viewsContainers": {
@@ -92,7 +98,7 @@
     "viewsWelcome": [
       {
         "view": "ort-insight.dependencyTree",
-        "contents": "No ORT analysis results found.\n[Run ORT Analyzer](command:ort-insight.analyze)\nMake sure ORT is installed on your system."
+        "contents": "No ORT analysis results found.\n[Run ORT Analyzer](command:ort-insight.analyze)\n[Open Setup Wizard](command:ort-insight.showSetup)\nNeed help? The setup wizard will detect and configure Java and ORT automatically."
       }
     ],
     "menus": {
@@ -120,6 +126,9 @@
         },
         {
           "command": "ort-insight.checkAdvisories"
+        },
+        {
+          "command": "ort-insight.showSetup"
         }
       ]
     },
@@ -133,28 +142,50 @@
         },
         "ortInsight.timeout": {
           "type": "number",
-          "default": 300000,
-          "description": "Timeout for ORT analysis in milliseconds (default: 5 minutes)"
+          "default": 600000,
+          "description": "Timeout for ORT analysis in milliseconds (default: 10 minutes)"
         },
         "ortInsight.sbomFormat": {
           "type": "string",
-          "enum": ["CycloneDX", "SPDX"],
+          "enum": [
+            "CycloneDX",
+            "SPDX"
+          ],
           "default": "CycloneDX",
           "description": "Preferred SBOM format"
         },
         "ortInsight.permissiveLicenses": {
           "type": "array",
-          "default": ["MIT", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "ISC", "0BSD"],
+          "default": [
+            "MIT",
+            "Apache-2.0",
+            "BSD-2-Clause",
+            "BSD-3-Clause",
+            "ISC",
+            "0BSD"
+          ],
           "description": "Licenses considered permissive (green)"
         },
         "ortInsight.weakCopyleftLicenses": {
           "type": "array",
-          "default": ["LGPL-2.0", "LGPL-2.1", "LGPL-3.0", "MPL-1.1", "MPL-2.0", "EPL-1.0", "EPL-2.0"],
+          "default": [
+            "LGPL-2.0",
+            "LGPL-2.1",
+            "LGPL-3.0",
+            "MPL-1.1",
+            "MPL-2.0",
+            "EPL-1.0",
+            "EPL-2.0"
+          ],
           "description": "Licenses considered weak copyleft (yellow)"
         },
         "ortInsight.strongCopyleftLicenses": {
           "type": "array",
-          "default": ["GPL-2.0", "GPL-3.0", "AGPL-3.0"],
+          "default": [
+            "GPL-2.0",
+            "GPL-3.0",
+            "AGPL-3.0"
+          ],
           "description": "Licenses considered strong copyleft (red)"
         },
         "ortInsight.enableDiagnostics": {
@@ -166,9 +197,9 @@
     }
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile",
-    "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./",
+    "vscode:prepublish": "node esbuild.js --production",
+    "compile": "node esbuild.js",
+    "watch": "node esbuild.js --watch",
     "pretest": "npm run compile && npm run lint",
     "lint": "eslint src --ext ts",
     "test": "node ./out/test/runTest.js",
@@ -176,16 +207,16 @@
     "package": "vsce package"
   },
   "devDependencies": {
-    "@types/vscode": "^1.85.0",
-    "@types/node": "^20.x",
     "@types/mocha": "^10.0.6",
+    "@types/node": "^20.x",
+    "@types/vscode": "^1.85.0",
     "@typescript-eslint/eslint-plugin": "^6.15.0",
     "@typescript-eslint/parser": "^6.15.0",
     "@vscode/test-electron": "^2.3.8",
+    "@vscode/vsce": "^2.22.0",
+    "esbuild": "^0.27.3",
     "eslint": "^8.56.0",
     "mocha": "^10.2.0",
-    "typescript": "^5.3.3",
-    "@vscode/vsce": "^2.22.0"
-  },
-  "dependencies": {}
+    "typescript": "^5.3.3"
+  }
 }

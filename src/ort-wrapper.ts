@@ -6,6 +6,7 @@ import * as vscode from 'vscode';
 import * as child_process from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
+import { SetupDetector } from './setup-detector';
 
 export class ORTWrapper {
   private outputChannel: vscode.OutputChannel;
@@ -20,15 +21,16 @@ export class ORTWrapper {
   async runAnalyzer(workspaceFolder: vscode.WorkspaceFolder): Promise<string> {
     const config = vscode.workspace.getConfiguration('ortInsight');
     const ortPath = config.get<string>('ortPath', 'ort');
-    const timeout = config.get<number>('timeout', 300000);
+    const timeout = config.get<number>('timeout', 600000);
 
     const outputDir = path.join(workspaceFolder.uri.fsPath, '.ort');
     const resultFile = path.join(outputDir, 'analyzer-result.json');
 
-    // Create output directory
-    if (!fs.existsSync(outputDir)) {
-      fs.mkdirSync(outputDir, { recursive: true });
+    // Clean old results and create output directory
+    if (fs.existsSync(outputDir)) {
+      fs.rmSync(outputDir, { recursive: true, force: true });
     }
+    fs.mkdirSync(outputDir, { recursive: true });
 
     this.outputChannel.clear();
     this.outputChannel.show(true);
@@ -65,19 +67,28 @@ export class ORTWrapper {
   async runAdvisor(analyzerResultFile: string): Promise<string> {
     const config = vscode.workspace.getConfiguration('ortInsight');
     const ortPath = config.get<string>('ortPath', 'ort');
-    const timeout = config.get<number>('timeout', 300000);
+    const timeout = config.get<number>('timeout', 600000);
 
-    const outputDir = path.dirname(analyzerResultFile);
+    const outputDir = path.join(path.dirname(analyzerResultFile), 'advisor');
+
+    // Clean old advisor output to avoid "output files must not exist" error
+    if (fs.existsSync(outputDir)) {
+      fs.rmSync(outputDir, { recursive: true, force: true });
+    }
+    fs.mkdirSync(outputDir, { recursive: true });
+
     const resultFile = path.join(outputDir, 'advisor-result.json');
 
     this.outputChannel.appendLine('');
-    this.outputChannel.appendLine('Starting ORT Advisor...');
+    this.outputChannel.appendLine('Starting ORT Advisor (using OSV vulnerability database)...');
     this.outputChannel.appendLine('');
 
+    // ORT advise requires --advisors flag: OSV (free), OSSIndex, VulnerableCode, BlackDuck
     const args = [
       'advise',
       '-i', analyzerResultFile,
       '-o', outputDir,
+      '-a', 'OSV',
       '-f', 'JSON'
     ];
 
@@ -86,6 +97,20 @@ export class ORTWrapper {
 
       this.outputChannel.appendLine('');
       this.outputChannel.appendLine('ORT Advisor completed successfully!');
+
+      // Find the generated advisor result file
+      if (fs.existsSync(resultFile)) {
+        return resultFile;
+      }
+
+      // ORT may name it differently — look for any JSON result
+      const files = fs.readdirSync(outputDir);
+      const jsonFile = files.find(f => f.endsWith('.json'));
+      if (jsonFile) {
+        const foundFile = path.join(outputDir, jsonFile);
+        this.outputChannel.appendLine(`Advisor result: ${foundFile}`);
+        return foundFile;
+      }
 
       return resultFile;
     } catch (error) {
@@ -106,30 +131,44 @@ export class ORTWrapper {
   ): Promise<string> {
     const config = vscode.workspace.getConfiguration('ortInsight');
     const ortPath = config.get<string>('ortPath', 'ort');
-    const timeout = config.get<number>('timeout', 300000);
+    const timeout = config.get<number>('timeout', 600000);
 
-    const outputDir = path.dirname(analyzerResultFile);
-    const extension = format === 'CycloneDX' ? 'cyclonedx.json' : 'spdx.json';
-    const resultFile = path.join(outputDir, `sbom.${extension}`);
+    const outputDir = path.join(path.dirname(analyzerResultFile), 'reports');
+
+    // Clean old reports directory to avoid "output files must not exist" error
+    if (fs.existsSync(outputDir)) {
+      fs.rmSync(outputDir, { recursive: true, force: true });
+    }
+    fs.mkdirSync(outputDir, { recursive: true });
 
     this.outputChannel.appendLine('');
     this.outputChannel.appendLine(`Generating ${format} SBOM...`);
     this.outputChannel.appendLine('');
 
-    const reporterFormat = format === 'CycloneDX' ? 'CycloneDx' : 'SpdxDocument';
+    // ORT report command: -f is --report-formats (the reporter plugin name)
+    // Valid formats: CycloneDX, SpdxDocument, StaticHTML, WebApp, etc.
+    const reporterFormat = format === 'CycloneDX' ? 'CycloneDX' : 'SpdxDocument';
 
     const args = [
       'report',
       '-i', analyzerResultFile,
       '-o', outputDir,
-      '-f', reporterFormat,
-      '-O', `output.file.name=${path.basename(resultFile)}`
+      '-f', reporterFormat
     ];
 
     try {
       await this.executeCommand(ortPath, args, outputDir, timeout);
 
       this.outputChannel.appendLine('');
+
+      // Find the generated SBOM file in the output directory
+      const files = fs.readdirSync(outputDir);
+      const sbomFile = files.find(f =>
+        (format === 'CycloneDX' && (f.includes('cyclonedx') || f.includes('CycloneDX') || f.endsWith('.cdx.json') || f.endsWith('.cdx.xml'))) ||
+        (format === 'SPDX' && (f.includes('spdx') || f.includes('Spdx') || f.endsWith('.spdx.json') || f.endsWith('.spdx.yml')))
+      ) || files[0]; // Fallback to first file if naming doesn't match
+
+      const resultFile = path.join(outputDir, sbomFile || 'sbom');
       this.outputChannel.appendLine(`SBOM generated: ${resultFile}`);
 
       return resultFile;
@@ -148,12 +187,28 @@ export class ORTWrapper {
     const config = vscode.workspace.getConfiguration('ortInsight');
     const ortPath = config.get<string>('ortPath', 'ort');
 
-    try {
-      await this.executeCommand(ortPath, ['--version'], process.cwd(), 5000);
+    this.outputChannel.appendLine(`Checking ORT installation at: ${ortPath}`);
+
+    // Check if the configured ORT path exists as a file
+    if (ortPath !== 'ort' && fs.existsSync(ortPath)) {
+      this.outputChannel.appendLine('ORT executable found at configured path.');
       return true;
-    } catch (error) {
-      return false;
     }
+
+    // Check if 'ort' is available in PATH by trying to resolve it
+    try {
+      const whereCmd = process.platform === 'win32' ? 'where' : 'which';
+      const result = child_process.execSync(`${whereCmd} ${ortPath}`, { timeout: 5000 }).toString().trim();
+      if (result) {
+        this.outputChannel.appendLine(`ORT found in PATH: ${result}`);
+        return true;
+      }
+    } catch {
+      // Not in PATH
+    }
+
+    this.outputChannel.appendLine('ORT not found. Please configure the ORT path in settings.');
+    return false;
   }
 
   /**
@@ -170,10 +225,23 @@ export class ORTWrapper {
       this.outputChannel.appendLine(`$ ${fullCommand}`);
       this.outputChannel.appendLine('');
 
+      // Ensure JAVA_HOME is set for ORT using cross-platform auto-detection
+      const env = { ...process.env };
+      if (!env.JAVA_HOME) {
+        const javaStatus = SetupDetector.detectJava();
+        if (javaStatus.installed && javaStatus.javaHome) {
+          env.JAVA_HOME = javaStatus.javaHome;
+          const pathSep = process.platform === 'win32' ? ';' : ':';
+          const binDir = path.join(javaStatus.javaHome, 'bin');
+          env.PATH = `${binDir}${pathSep}${env.PATH || ''}`;
+          this.outputChannel.appendLine(`Auto-detected JAVA_HOME: ${javaStatus.javaHome}`);
+        }
+      }
+
       const childProcess = child_process.spawn(command, args, {
         cwd,
         shell: true,
-        env: process.env
+        env
       });
 
       let stdout = '';

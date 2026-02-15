@@ -11,6 +11,8 @@ import { VulnerabilityTreeProvider } from './ui/vulnerability-tree-provider';
 import { StatusBarProvider } from './ui/status-bar';
 import { DiagnosticsProvider } from './ui/diagnostics-provider';
 import { DashboardWebviewProvider } from './ui/dashboard-webview';
+import { SetupWizard } from './ui/setup-wizard';
+import { SetupDetector } from './setup-detector';
 import { Vulnerability } from './types';
 
 let outputChannel: vscode.OutputChannel;
@@ -20,6 +22,7 @@ let vulnerabilityTreeProvider: VulnerabilityTreeProvider;
 let statusBarProvider: StatusBarProvider;
 let diagnosticsProvider: DiagnosticsProvider;
 let dashboardProvider: DashboardWebviewProvider;
+let setupWizard: SetupWizard;
 
 /**
  * Extension activation
@@ -37,6 +40,7 @@ export async function activate(context: vscode.ExtensionContext) {
   statusBarProvider = new StatusBarProvider();
   diagnosticsProvider = new DiagnosticsProvider();
   dashboardProvider = new DashboardWebviewProvider(context.extensionUri);
+  setupWizard = new SetupWizard(context);
 
   // Register tree views
   vscode.window.registerTreeDataProvider('ort-insight.dependencyTree', dependencyTreeProvider);
@@ -55,17 +59,27 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.workspace.onDidChangeTextDocument(e => diagnosticsProvider.updateDiagnostics(e.document))
   );
 
-  // Check if ORT is installed
-  const ortInstalled = await ortWrapper.checkOrtInstallation();
-  if (!ortInstalled) {
-    const message = 'ORT (OSS Review Toolkit) not found in PATH. Please install ORT to use this extension.';
-    const action = await vscode.window.showWarningMessage(
-      message,
-      'Open ORT Documentation'
-    );
+  // First-run setup wizard
+  if (setupWizard.shouldShowWizard()) {
+    setupWizard.show();
+  } else {
+    // Not first run — check if ORT is available and show actionable error if not
+    const ortInstalled = await ortWrapper.checkOrtInstallation();
+    if (!ortInstalled) {
+      const action = await vscode.window.showWarningMessage(
+        'ORT not found. Run the setup wizard to configure ORT Insight.',
+        'Open Setup Wizard',
+        'Download ORT',
+        'Configure Path'
+      );
 
-    if (action === 'Open ORT Documentation') {
-      vscode.env.openExternal(vscode.Uri.parse('https://github.com/oss-review-toolkit/ort'));
+      if (action === 'Open Setup Wizard') {
+        setupWizard.show();
+      } else if (action === 'Download ORT') {
+        vscode.env.openExternal(vscode.Uri.parse('https://github.com/oss-review-toolkit/ort/releases'));
+      } else if (action === 'Configure Path') {
+        vscode.commands.executeCommand('workbench.action.openSettings', 'ortInsight.ortPath');
+      }
     }
   }
 
@@ -136,30 +150,75 @@ function registerCommands(context: vscode.ExtensionContext) {
       showVulnerabilityDetails(vuln);
     })
   );
+
+  // Setup Wizard
+  context.subscriptions.push(
+    vscode.commands.registerCommand('ort-insight.showSetup', async () => {
+      setupWizard.show();
+    })
+  );
 }
 
 /**
  * Run ORT Analyzer
  */
 async function runAnalyzer() {
-  const workspaceFolder = getWorkspaceFolder();
+  const workspaceFolder = await getWorkspaceFolder();
   if (!workspaceFolder) {
+    return;
+  }
+
+  // Pre-flight check: ensure ORT is available
+  const ortReady = await ortWrapper.checkOrtInstallation();
+  if (!ortReady) {
+    const action = await vscode.window.showErrorMessage(
+      'Cannot run analysis: ORT is not installed or not configured.',
+      'Open Setup Wizard',
+      'Download ORT',
+      'Configure Path'
+    );
+    if (action === 'Open Setup Wizard') { setupWizard.show(); }
+    else if (action === 'Download ORT') { vscode.env.openExternal(vscode.Uri.parse('https://github.com/oss-review-toolkit/ort/releases')); }
+    else if (action === 'Configure Path') { vscode.commands.executeCommand('workbench.action.openSettings', 'ortInsight.ortPath'); }
+    return;
+  }
+
+  // Pre-flight check: ensure Java is available
+  const javaStatus = SetupDetector.detectJava();
+  if (!javaStatus.installed) {
+    const action = await vscode.window.showErrorMessage(
+      'Cannot run analysis: Java 21+ is required but not found.',
+      'Open Setup Wizard',
+      'Download Java 21'
+    );
+    if (action === 'Open Setup Wizard') { setupWizard.show(); }
+    else if (action === 'Download Java 21') { vscode.env.openExternal(vscode.Uri.parse('https://adoptium.net/temurin/releases/?version=21')); }
     return;
   }
 
   try {
     statusBarProvider.showScanning();
-    vscode.window.showInformationMessage('Running ORT Analyzer...');
+    vscode.window.showInformationMessage('Running ORT Analyzer... This may take several minutes.');
 
     const resultFile = await ortWrapper.runAnalyzer(workspaceFolder);
 
     // Load results into UI
     await loadResults(resultFile);
 
-    vscode.window.showInformationMessage('ORT Analysis completed successfully!');
+    vscode.window.showInformationMessage('ORT Analysis completed successfully!', 'Show Dashboard').then(action => {
+      if (action === 'Show Dashboard') {
+        vscode.commands.executeCommand('ort-insight.showDashboard');
+      }
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    vscode.window.showErrorMessage(`ORT Analysis failed: ${message}`);
+    const action = await vscode.window.showErrorMessage(
+      `ORT Analysis failed: ${message}`,
+      'Show Output',
+      'Open Setup Wizard'
+    );
+    if (action === 'Show Output') { outputChannel.show(); }
+    else if (action === 'Open Setup Wizard') { setupWizard.show(); }
     statusBarProvider.loadResults('');
   }
 }
@@ -168,7 +227,7 @@ async function runAnalyzer() {
  * Show Dashboard
  */
 async function showDashboard() {
-  const workspaceFolder = getWorkspaceFolder();
+  const workspaceFolder = await getWorkspaceFolder();
   if (!workspaceFolder) {
     return;
   }
@@ -186,7 +245,7 @@ async function showDashboard() {
  * Generate SBOM
  */
 async function generateSBOM() {
-  const workspaceFolder = getWorkspaceFolder();
+  const workspaceFolder = await getWorkspaceFolder();
   if (!workspaceFolder) {
     return;
   }
@@ -235,7 +294,7 @@ async function generateSBOM() {
  * Check for vulnerabilities using ORT Advisor
  */
 async function checkAdvisories() {
-  const workspaceFolder = getWorkspaceFolder();
+  const workspaceFolder = await getWorkspaceFolder();
   if (!workspaceFolder) {
     return;
   }
@@ -265,7 +324,7 @@ async function checkAdvisories() {
  * Clear ORT cache
  */
 async function clearCache() {
-  const workspaceFolder = getWorkspaceFolder();
+  const workspaceFolder = await getWorkspaceFolder();
   if (!workspaceFolder) {
     return;
   }
@@ -300,14 +359,18 @@ async function clearCache() {
  * Load existing results on activation
  */
 async function loadExistingResults() {
-  const workspaceFolder = getWorkspaceFolder();
-  if (!workspaceFolder) {
-    return;
-  }
+  try {
+    const workspaceFolder = await getWorkspaceFolder();
+    if (!workspaceFolder) {
+      return;
+    }
 
-  const resultFile = ORTWrapper.findLatestResult(workspaceFolder);
-  if (resultFile) {
-    await loadResults(resultFile);
+    const resultFile = ORTWrapper.findLatestResult(workspaceFolder);
+    if (resultFile) {
+      await loadResults(resultFile);
+    }
+  } catch (error) {
+    console.error('Failed to load existing ORT results:', error);
   }
 }
 
@@ -406,21 +469,23 @@ function getVulnerabilityDetailsHtml(vuln: Vulnerability): string {
 /**
  * Get workspace folder or show error
  */
-function getWorkspaceFolder(): vscode.WorkspaceFolder | undefined {
+async function getWorkspaceFolder(): Promise<vscode.WorkspaceFolder | undefined> {
   const folders = vscode.workspace.workspaceFolders;
 
   if (!folders || folders.length === 0) {
-    vscode.window.showErrorMessage('No workspace folder open');
+    vscode.window.showErrorMessage('No workspace folder open. Please open a project folder first.');
     return undefined;
   }
 
-  // If multiple folders, let user choose
-  if (folders.length > 1) {
-    vscode.window.showQuickPick(
-      folders.map(f => f.name),
-      { placeHolder: 'Select workspace folder for ORT analysis' }
-    );
+  if (folders.length === 1) {
+    return folders[0];
   }
 
-  return folders[0];
+  // Multiple folders - let user choose
+  const selected = await vscode.window.showQuickPick(
+    folders.map(f => ({ label: f.name, description: f.uri.fsPath, folder: f })),
+    { placeHolder: 'Select workspace folder for ORT analysis' }
+  );
+
+  return selected?.folder;
 }

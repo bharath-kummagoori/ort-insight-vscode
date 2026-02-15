@@ -11,6 +11,7 @@ import {
   ComplianceStatus,
   LicenseRisk,
   Identifier,
+  DependencyNode,
   Package,
   Project,
   Vulnerability
@@ -186,12 +187,27 @@ export class ORTParser {
 
     if (project.scope_dependencies) {
       for (const scope of project.scope_dependencies) {
+        const scopeChildren: DependencyTreeItem[] = [];
+
         for (const dep of scope.dependencies) {
-          const child = this.buildDependencyItem(dep.id, packages, vulnerabilities, new Set());
+          // Each top-level dependency gets its own visited set for per-branch tracking
+          const child = this.buildDependencyItem(dep, packages, vulnerabilities, new Set());
           if (child) {
-            children.push(child);
+            scopeChildren.push(child);
           }
         }
+
+        // Create a scope grouping item
+        const scopeItem: DependencyTreeItem = {
+          id: { type: '', namespace: '', name: scope.name, version: '' },
+          label: `${scope.name} (${scopeChildren.length})`,
+          license: undefined,
+          risk: 'unknown',
+          children: scopeChildren,
+          vulnerabilities: [],
+          issues: []
+        };
+        children.push(scopeItem);
       }
     }
 
@@ -210,43 +226,52 @@ export class ORTParser {
    * Build dependency item recursively
    */
   private buildDependencyItem(
-    id: Identifier,
+    node: DependencyNode,
     packages: Map<string, Package>,
     vulnerabilities: Map<string, Vulnerability[]>,
     visited: Set<string>
   ): DependencyTreeItem | null {
-    const key = this.getIdentifierKey(id);
+    const key = this.getIdentifierKey(node.id);
 
     if (visited.has(key)) {
-      return null; // Prevent circular dependencies
+      return null; // Prevent circular dependencies on this branch
     }
 
-    visited.add(key);
+    // Create a new visited set for this branch to allow the same package
+    // to appear in different branches of the tree
+    const branchVisited = new Set(visited);
+    branchVisited.add(key);
 
     const pkg = packages.get(key);
-    if (!pkg) {
-      return {
-        id,
-        label: `${id.name}@${id.version}`,
-        license: undefined,
-        risk: 'unknown',
-        children: [],
-        vulnerabilities: [],
-        issues: []
-      };
-    }
-
-    const license = this.extractLicense(pkg);
+    const id = pkg?.id ?? node.id;
+    const license = pkg ? this.extractLicense(pkg) : undefined;
     const risk = this.classifyLicenseRisk(license);
 
+    // Recurse into child dependencies
+    const children: DependencyTreeItem[] = [];
+    if (node.dependencies) {
+      for (const depRef of node.dependencies) {
+        // Create a DependencyNode-like object from the reference for recursion
+        const childNode: DependencyNode = {
+          id: depRef.id,
+          dependencies: [],
+          issues: []
+        };
+        const child = this.buildDependencyItem(childNode, packages, vulnerabilities, branchVisited);
+        if (child) {
+          children.push(child);
+        }
+      }
+    }
+
     return {
-      id: pkg.id,
-      label: `${pkg.id.name}@${pkg.id.version}`,
+      id,
+      label: `${id.name}@${id.version}`,
       license,
       risk,
-      children: [],
+      children,
       vulnerabilities: vulnerabilities.get(key) || [],
-      issues: []
+      issues: node.issues || []
     };
   }
 

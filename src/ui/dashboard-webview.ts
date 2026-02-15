@@ -224,6 +224,7 @@ export class DashboardWebviewProvider {
     .risk-permissive { background-color: rgba(76, 175, 80, 0.2); color: #4caf50; }
     .risk-weak-copyleft { background-color: rgba(255, 152, 0, 0.2); color: #ff9800; }
     .risk-strong-copyleft { background-color: rgba(244, 67, 54, 0.2); color: #f44336; }
+    .risk-proprietary { background-color: rgba(156, 39, 176, 0.2); color: #9c27b0; }
     .risk-unknown { background-color: rgba(158, 158, 158, 0.2); color: #9e9e9e; }
 
     .section {
@@ -317,7 +318,7 @@ export class DashboardWebviewProvider {
 
     const rows = entries.map(([license, count]) => {
       const risk = this.parser.classifyLicenseRisk(license);
-      const riskClass = risk.replace('-', '-');
+      const riskClass = risk;
 
       return `
         <tr>
