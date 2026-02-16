@@ -3,6 +3,7 @@
 src/**
 node_modules/**
 .ort/**
+.ort-config/**
 .stash*/**
 .git/**
 docs/**

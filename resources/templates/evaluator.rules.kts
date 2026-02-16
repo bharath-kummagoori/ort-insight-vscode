@@ -6,16 +6,6 @@
  *
  * Usage: ORT Insight > Evaluate Policies (or Ctrl+Shift+P > "ORT Insight: Evaluate Policies")
  *
- * Rule Types:
- *   - packageRule: Runs for each package (dependency)
- *   - dependencyRule: Runs for each dependency relationship
- *   - ortResultRule: Runs once on the entire result
- *
- * Severity Levels:
- *   - error(message, howToFix)   → Policy violation (blocks release)
- *   - warning(message, howToFix) → Policy warning (review needed)
- *   - hint(message, howToFix)    → Informational note
- *
  * Documentation: https://oss-review-toolkit.org/ort/docs/configuration/evaluator-rules
  */
 
@@ -24,19 +14,55 @@ val permissiveLicenses = licenseClassifications.licensesByCategory["permissive"]
 val copyleftLicenses = licenseClassifications.licensesByCategory["copyleft"].orEmpty()
 val strongCopyleftLicenses = licenseClassifications.licensesByCategory["strong-copyleft"].orEmpty()
 val copyleftLimitedLicenses = licenseClassifications.licensesByCategory["copyleft-limited"].orEmpty()
+val publicDomainLicenses = licenseClassifications.licensesByCategory["public-domain"].orEmpty()
 val commercialRestrictedLicenses = licenseClassifications.licensesByCategory["commercial-restricted"].orEmpty()
 
-// ============================================================================
+// Custom matchers for license categorization
+fun PackageRule.LicenseRule.isStrongCopyleft() =
+    object : RuleMatcher {
+        override val description = "isStrongCopyleft($license)"
+        override fun matches() = license in strongCopyleftLicenses
+    }
+
+fun PackageRule.LicenseRule.isCopyleftLimited() =
+    object : RuleMatcher {
+        override val description = "isCopyleftLimited($license)"
+        override fun matches() = license in copyleftLimitedLicenses
+    }
+
+fun PackageRule.LicenseRule.isCommercialRestricted() =
+    object : RuleMatcher {
+        override val description = "isCommercialRestricted($license)"
+        override fun matches() = license in commercialRestrictedLicenses
+    }
+
+fun PackageRule.LicenseRule.isPermissive() =
+    object : RuleMatcher {
+        override val description = "isPermissive($license)"
+        override fun matches() = license in permissiveLicenses
+    }
+
+fun PackageRule.LicenseRule.isCopyleft() =
+    object : RuleMatcher {
+        override val description = "isCopyleft($license)"
+        override fun matches() = license in copyleftLicenses
+    }
+
+fun PackageRule.LicenseRule.isPublicDomain() =
+    object : RuleMatcher {
+        override val description = "isPublicDomain($license)"
+        override fun matches() = license in publicDomainLicenses
+    }
+
 // RULE 1: Flag strong copyleft licenses (GPL, AGPL)
-// ============================================================================
-packageRule("FLAG_STRONG_COPYLEFT") {
+fun RuleSet.flagStrongCopyleft() = packageRule("FLAG_STRONG_COPYLEFT") {
     require {
         -isExcluded()
     }
 
-    licenseRule("STRONG_COPYLEFT_IN_DIRECT_DEPENDENCY", LicenseView.CONCLUDED_OR_DECLARED_AND_DETECTED) {
+    licenseRule("STRONG_COPYLEFT_IN_DEPENDENCY", LicenseView.CONCLUDED_OR_DECLARED_AND_DETECTED) {
         require {
-            +isCategorized("strong-copyleft")
+            +isStrongCopyleft()
         }
 
         error(
@@ -48,17 +74,15 @@ packageRule("FLAG_STRONG_COPYLEFT") {
     }
 }
 
-// ============================================================================
 // RULE 2: Warn about limited copyleft licenses (LGPL, MPL, EPL)
-// ============================================================================
-packageRule("WARN_COPYLEFT_LIMITED") {
+fun RuleSet.warnCopyleftLimited() = packageRule("WARN_COPYLEFT_LIMITED") {
     require {
         -isExcluded()
     }
 
     licenseRule("LIMITED_COPYLEFT_WARNING", LicenseView.CONCLUDED_OR_DECLARED_AND_DETECTED) {
         require {
-            +isCategorized("copyleft-limited")
+            +isCopyleftLimited()
         }
 
         warning(
@@ -70,17 +94,15 @@ packageRule("WARN_COPYLEFT_LIMITED") {
     }
 }
 
-// ============================================================================
 // RULE 3: Flag commercial-restricted licenses (CC-BY-NC, etc.)
-// ============================================================================
-packageRule("FLAG_COMMERCIAL_RESTRICTED") {
+fun RuleSet.flagCommercialRestricted() = packageRule("FLAG_COMMERCIAL_RESTRICTED") {
     require {
         -isExcluded()
     }
 
     licenseRule("NO_COMMERCIAL_RESTRICTED_LICENSES", LicenseView.CONCLUDED_OR_DECLARED_AND_DETECTED) {
         require {
-            +isCategorized("commercial-restricted")
+            +isCommercialRestricted()
         }
 
         error(
@@ -91,13 +113,11 @@ packageRule("FLAG_COMMERCIAL_RESTRICTED") {
     }
 }
 
-// ============================================================================
 // RULE 4: Flag packages with no declared license
-// ============================================================================
-packageRule("REQUIRE_DECLARED_LICENSE") {
+fun RuleSet.requireDeclaredLicense() = packageRule("REQUIRE_DECLARED_LICENSE") {
     require {
         -isExcluded()
-        +hasNoDeclaredLicense()
+        -hasLicense()
     }
 
     error(
@@ -107,22 +127,20 @@ packageRule("REQUIRE_DECLARED_LICENSE") {
     )
 }
 
-// ============================================================================
-// RULE 5: Warn about packages with unresolved/unknown licenses
-// ============================================================================
-packageRule("WARN_UNMAPPED_LICENSE") {
+// RULE 5: Warn about packages with uncategorized licenses
+fun RuleSet.warnUnmappedLicense() = packageRule("WARN_UNMAPPED_LICENSE") {
     require {
         -isExcluded()
     }
 
     licenseRule("UNMAPPED_LICENSE", LicenseView.CONCLUDED_OR_DECLARED_AND_DETECTED) {
         require {
-            -isCategorized("permissive")
-            -isCategorized("copyleft")
-            -isCategorized("strong-copyleft")
-            -isCategorized("copyleft-limited")
-            -isCategorized("public-domain")
-            -isCategorized("commercial-restricted")
+            -isPermissive()
+            -isCopyleft()
+            -isStrongCopyleft()
+            -isCopyleftLimited()
+            -isPublicDomain()
+            -isCommercialRestricted()
         }
 
         warning(
@@ -133,3 +151,14 @@ packageRule("WARN_UNMAPPED_LICENSE") {
         )
     }
 }
+
+// Execute all rules
+val ruleSet = ruleSet(ortResult, licenseInfoResolver, resolutionProvider) {
+    flagStrongCopyleft()
+    warnCopyleftLimited()
+    flagCommercialRestricted()
+    requireDeclaredLicense()
+    warnUnmappedLicense()
+}
+
+ruleViolations += ruleSet.violations
