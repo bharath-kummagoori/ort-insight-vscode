@@ -1,5 +1,17 @@
 /**
  * ORT CLI Wrapper - Executes ORT commands and captures output
+ *
+ * This class is the bridge between VS Code and the ORT command-line tool.
+ * It builds the correct CLI arguments, spawns child processes, streams output
+ * to the VS Code output channel in real-time, and handles timeouts/errors.
+ *
+ * Supported ORT commands:
+ *   - analyze: Scans project dependencies and outputs analyzer-result.json
+ *   - advise:  Checks dependencies against vulnerability databases (OSV)
+ *   - evaluate: Runs policy rules against analysis results
+ *   - report:  Generates SBOM (CycloneDX/SPDX) or HTML reports
+ *
+ * Auto-detects JAVA_HOME if not set, since ORT requires Java 21+.
  */
 
 import * as vscode from 'vscode';
@@ -16,7 +28,10 @@ export class ORTWrapper {
   }
 
   /**
-   * Run ORT analyzer on the workspace
+   * Runs 'ort analyze' on the workspace folder.
+   * Scans package managers (npm, Maven, Gradle, pip, etc.) to resolve all
+   * direct and transitive dependencies. Outputs analyzer-result.json.
+   * This is the first step - all other commands depend on this result.
    */
   async runAnalyzer(workspaceFolder: vscode.WorkspaceFolder): Promise<string> {
     const config = vscode.workspace.getConfiguration('ortInsight');
@@ -73,7 +88,9 @@ export class ORTWrapper {
   }
 
   /**
-   * Run ORT advisor to check for vulnerabilities
+   * Runs 'ort advise' to check dependencies for known security vulnerabilities.
+   * Uses the OSV (Open Source Vulnerabilities) database which is free and open.
+   * Requires internet access. Non-fatal if it fails (e.g., behind a firewall).
    */
   async runAdvisor(analyzerResultFile: string): Promise<string> {
     const config = vscode.workspace.getConfiguration('ortInsight');
@@ -136,7 +153,9 @@ export class ORTWrapper {
   }
 
   /**
-   * Generate SBOM in specified format
+   * Runs 'ort report' to generate a Software Bill of Materials (SBOM).
+   * Supports CycloneDX and SPDX formats. The SBOM lists every dependency
+   * with its license, version, and origin - required for compliance audits.
    */
   async generateSBOM(
     analyzerResultFile: string,
@@ -194,7 +213,8 @@ export class ORTWrapper {
   }
 
   /**
-   * Generate ORT native HTML report (StaticHTML or WebApp)
+   * Runs 'ort report' to generate ORT's built-in HTML reports.
+   * StaticHTML is a single self-contained file; WebApp is interactive with search.
    */
   async generateReport(
     analyzerResultFile: string,
@@ -245,7 +265,10 @@ export class ORTWrapper {
   }
 
   /**
-   * Run ORT Evaluator to check policy compliance
+   * Runs 'ort evaluate' to check dependencies against custom policy rules.
+   * Takes a Kotlin DSL rules file (.rules.kts) and license classifications (.yml).
+   * Note: ORT evaluator exits with non-zero code when violations are found -
+   * this is expected behavior, not an error. We check if result file exists.
    */
   async runEvaluator(
     analyzerResultFile: string,
@@ -350,7 +373,10 @@ export class ORTWrapper {
   }
 
   /**
-   * Check if ORT is installed and available
+   * Verifies that ORT is installed and accessible.
+   * First checks if the configured path exists as a file,
+   * then falls back to searching PATH using 'where' (Windows) or 'which' (Linux/Mac).
+   * Uses execFileSync instead of execSync to prevent command injection.
    */
   async checkOrtInstallation(): Promise<boolean> {
     const config = vscode.workspace.getConfiguration('ortInsight');
@@ -381,7 +407,10 @@ export class ORTWrapper {
   }
 
   /**
-   * Execute an ORT command
+   * Core method that spawns an ORT CLI process and manages its lifecycle.
+   * Streams stdout/stderr to the VS Code output channel in real-time.
+   * Auto-detects JAVA_HOME if not set. Handles timeouts gracefully.
+   * Only uses shell mode for .bat/.cmd files on Windows (security hardening).
    */
   private executeCommand(
     command: string,
@@ -456,7 +485,8 @@ export class ORTWrapper {
   }
 
   /**
-   * Find the latest ORT result file in workspace
+   * Looks for existing ORT analyzer results in the workspace's .ort/ directory.
+   * Returns the path to analyzer-result.json if it exists, undefined otherwise.
    */
   static findLatestResult(workspaceFolder: vscode.WorkspaceFolder): string | undefined {
     const ortDir = path.join(workspaceFolder.uri.fsPath, '.ort');
@@ -470,7 +500,8 @@ export class ORTWrapper {
   }
 
   /**
-   * Clear ORT cache and results
+   * Deletes the entire .ort/ directory in the workspace.
+   * This removes all analyzer results, advisor results, reports, and evaluator output.
    */
   static clearCache(workspaceFolder: vscode.WorkspaceFolder): void {
     const ortDir = path.join(workspaceFolder.uri.fsPath, '.ort');

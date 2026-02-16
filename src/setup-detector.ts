@@ -1,5 +1,14 @@
 /**
  * Setup Detector - Detects Java and ORT installations across all platforms
+ *
+ * Scans the user's system to find Java 21+ and ORT CLI installations.
+ * Checks these locations in order:
+ *   1. JAVA_HOME / PATH environment variables
+ *   2. Common install directories (Program Files, /usr/lib/jvm, homebrew, etc.)
+ *   3. User-configured paths in VS Code settings
+ *
+ * Works on Windows, macOS, and Linux. Uses execFileSync (not execSync)
+ * for all subprocess calls to prevent command injection.
  */
 
 import * as child_process from 'child_process';

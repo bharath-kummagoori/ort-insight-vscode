@@ -1,5 +1,15 @@
 /**
  * Type definitions for ORT (OSS Review Toolkit) data structures
+ *
+ * These TypeScript interfaces mirror the JSON structure of ORT's output files
+ * (analyzer-result.json, advisor-result.json). They're used throughout the
+ * extension to provide type safety when parsing and displaying ORT data.
+ *
+ * Key types:
+ *   - ORTResult: Top-level structure of any ORT result file
+ *   - Package: A single dependency with its license, version, and metadata
+ *   - Vulnerability: A known security issue from the OSV database
+ *   - LicenseRisk: Classification of license types (permissive, copyleft, etc.)
  */
 
 export interface ORTResult {

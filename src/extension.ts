@@ -1,7 +1,15 @@
 /**
  * ORT Insight - Main Extension Entry Point
  *
- * VS Code extension for OSS Review Toolkit (ORT) integration
+ * This is the core file that wires everything together. It handles:
+ * - Extension lifecycle (activation, deactivation, cleanup)
+ * - Registering all 10 commands users can trigger from the command palette
+ * - Pre-flight checks before running ORT (Java installed? ORT available? Git repo?)
+ * - Coordinating between ORT CLI wrapper, UI components, and webview panels
+ * - Rendering policy evaluation results and vulnerability details as HTML webviews
+ *
+ * The extension uses the ORT CLI under the hood. It doesn't ship ORT itself -
+ * users need to have ORT installed separately. The Setup Wizard helps with that.
  */
 
 import * as vscode from 'vscode';
@@ -19,17 +27,21 @@ import { SetupDetector } from './setup-detector';
 import { Vulnerability } from './types';
 import { escapeHtml } from './ui/ui-utils';
 
-let outputChannel: vscode.OutputChannel;
-let ortWrapper: ORTWrapper;
-let dependencyTreeProvider: DependencyTreeProvider;
-let vulnerabilityTreeProvider: VulnerabilityTreeProvider;
-let statusBarProvider: StatusBarProvider;
-let diagnosticsProvider: DiagnosticsProvider;
-let dashboardProvider: DashboardWebviewProvider;
-let setupWizard: SetupWizard;
+// Global references to UI components and services.
+// These are initialized once during activation and shared across all commands.
+let outputChannel: vscode.OutputChannel;       // "ORT Insight" output panel for logging CLI output
+let ortWrapper: ORTWrapper;                     // Wraps all ORT CLI calls (analyze, advise, evaluate, report)
+let dependencyTreeProvider: DependencyTreeProvider;   // Sidebar tree showing project dependencies
+let vulnerabilityTreeProvider: VulnerabilityTreeProvider; // Sidebar tree showing security vulnerabilities
+let statusBarProvider: StatusBarProvider;       // Bottom status bar showing compliance status
+let diagnosticsProvider: DiagnosticsProvider;   // Inline warnings/errors in editor for license issues
+let dashboardProvider: DashboardWebviewProvider; // Main license dashboard with charts and tables
+let setupWizard: SetupWizard;                   // First-run wizard to help configure ORT and Java
 
 /**
- * Extension activation
+ * Called by VS Code when the extension activates (on startup).
+ * Sets up all UI components, registers commands, and checks if ORT is ready.
+ * If this is the first time, shows the setup wizard to guide the user.
  */
 export async function activate(context: vscode.ExtensionContext) {
   console.log('ORT Insight extension is activating...');
@@ -94,7 +106,8 @@ export async function activate(context: vscode.ExtensionContext) {
 }
 
 /**
- * Extension deactivation
+ * Called by VS Code when the extension is deactivated.
+ * Cleans up status bar, diagnostics, and webview resources.
  */
 export function deactivate() {
   statusBarProvider?.dispose();
@@ -103,7 +116,8 @@ export function deactivate() {
 }
 
 /**
- * Register all commands
+ * Registers all 10 commands that appear in the VS Code command palette (Ctrl+Shift+P).
+ * Each command maps to a function that handles user interaction and delegates to the ORT wrapper.
  */
 function registerCommands(context: vscode.ExtensionContext) {
   // Run ORT Analyzer
@@ -185,7 +199,16 @@ function registerCommands(context: vscode.ExtensionContext) {
 }
 
 /**
- * Run ORT Analyzer
+ * Runs the ORT Analyzer on the current workspace.
+ * This is the main scanning command - it reads package.json (or build files)
+ * and resolves all dependencies into a JSON result file at .ort/analyzer-result.json.
+ *
+ * Before running, it validates three things:
+ *   1. ORT CLI is installed and accessible
+ *   2. Java 21+ is available (ORT needs it)
+ *   3. The workspace is a git repository (ORT works best with git)
+ *
+ * The analysis can take several minutes for large projects.
  */
 async function runAnalyzer() {
   const workspaceFolder = await getWorkspaceFolder();
@@ -272,7 +295,10 @@ async function runAnalyzer() {
 }
 
 /**
- * Show Dashboard
+ * Opens the License Dashboard webview panel.
+ * Shows a visual overview of all dependency licenses - pie chart breakdown,
+ * compliance status, and a sortable table of all packages with their license risk levels.
+ * Requires analyzer results to exist (run ORT Analyzer first).
  */
 async function showDashboard() {
   const workspaceFolder = await getWorkspaceFolder();
@@ -290,7 +316,11 @@ async function showDashboard() {
 }
 
 /**
- * Generate SBOM
+ * Generates a Software Bill of Materials (SBOM) document.
+ * Lets the user choose between two industry-standard formats:
+ *   - CycloneDX: Common in DevSecOps pipelines
+ *   - SPDX: Standard for open source license compliance
+ * The generated file can be shared with customers or used for audit purposes.
  */
 async function generateSBOM() {
   const workspaceFolder = await getWorkspaceFolder();
@@ -339,7 +369,11 @@ async function generateSBOM() {
 }
 
 /**
- * Generate ORT's native HTML report
+ * Generates ORT's built-in HTML report.
+ * Two formats available:
+ *   - StaticHTML: Single self-contained HTML file with full dependency details
+ *   - WebApp: Interactive web application with search, filtering, and navigation
+ * The report opens in the user's browser or VS Code editor.
  */
 async function generateReport() {
   const workspaceFolder = await getWorkspaceFolder();
@@ -395,7 +429,15 @@ async function generateReport() {
 }
 
 /**
- * Evaluate Policy Rules using ORT Evaluator
+ * Runs the ORT Evaluator to check dependencies against custom policy rules.
+ * Policy rules are defined in Kotlin DSL files (.rules.kts) that specify which
+ * licenses are allowed, which need review, and which are blocked.
+ *
+ * Looks for rules in .ort-config/evaluator.rules.kts and license classifications
+ * in .ort-config/license-classifications.yml. If not found, offers to create
+ * template files or let the user browse for existing ones.
+ *
+ * Results are displayed in a webview with error/warning/hint severity filtering.
  */
 async function evaluatePolicy(context: vscode.ExtensionContext) {
   const workspaceFolder = await getWorkspaceFolder();
@@ -493,7 +535,9 @@ async function evaluatePolicy(context: vscode.ExtensionContext) {
 }
 
 /**
- * Show evaluator results in a webview panel
+ * Parses the ORT evaluator JSON output and displays violations in a webview panel.
+ * Reads the evaluation-result.json, extracts rule violations (errors, warnings, hints),
+ * and renders them in an HTML table with summary cards and filter buttons.
  */
 async function showEvaluatorResults(evalResultFile: string) {
   try {
@@ -562,7 +606,10 @@ async function showEvaluatorResults(evalResultFile: string) {
 }
 
 /**
- * Generate HTML for policy evaluation results
+ * Builds the full HTML page for the policy evaluation results webview.
+ * Includes summary cards (error/warning/hint counts), filter buttons,
+ * and a detailed table showing each violation with package, license, rule, and fix advice.
+ * All dynamic data is escaped with escapeHtml() to prevent XSS.
  */
 function getPolicyResultsHtml(
   violations: Array<{ rule: string; pkg: string; license: string; severity: string; message: string; howToFix: string }>,
@@ -728,7 +775,10 @@ function getPolicyResultsHtml(
 }
 
 /**
- * Initialize policy rules templates in workspace
+ * Creates starter policy rule files in the workspace's .ort-config/ directory.
+ * Copies evaluator.rules.kts (5 sample rules for copyleft, commercial, etc.) and
+ * license-classifications.yml (30+ license categorizations) from the extension's
+ * bundled templates. Users can then customize these for their organization's needs.
  */
 async function initPolicyRules(context: vscode.ExtensionContext) {
   const workspaceFolder = await getWorkspaceFolder();
@@ -808,7 +858,10 @@ async function initPolicyRules(context: vscode.ExtensionContext) {
 }
 
 /**
- * Check for vulnerabilities using ORT Advisor
+ * Checks all project dependencies for known security vulnerabilities.
+ * Uses ORT's Advisor with the OSV (Open Source Vulnerabilities) database.
+ * Requires internet access to query the vulnerability database.
+ * Results populate the Vulnerabilities sidebar tree view.
  */
 async function checkAdvisories() {
   const workspaceFolder = await getWorkspaceFolder();
@@ -838,7 +891,9 @@ async function checkAdvisories() {
 }
 
 /**
- * Clear ORT cache
+ * Deletes all ORT analysis results from the workspace (.ort/ directory).
+ * Asks for confirmation before deleting. Also clears the sidebar trees,
+ * diagnostics, and status bar so the UI reflects the clean state.
  */
 async function clearCache() {
   const workspaceFolder = await getWorkspaceFolder();
@@ -873,7 +928,9 @@ async function clearCache() {
 }
 
 /**
- * Load existing results on activation
+ * Called on extension startup to check if there are existing ORT results.
+ * If the user previously ran an analysis, this loads those results into
+ * the sidebar trees and status bar so they don't have to re-run.
  */
 async function loadExistingResults() {
   try {
@@ -892,7 +949,8 @@ async function loadExistingResults() {
 }
 
 /**
- * Load results into all UI components
+ * Feeds an ORT result JSON file into all four UI components at once:
+ * dependency tree, vulnerability tree, status bar, and inline diagnostics.
  */
 async function loadResults(resultFile: string) {
   await dependencyTreeProvider.loadResults(resultFile);
@@ -902,7 +960,9 @@ async function loadResults(resultFile: string) {
 }
 
 /**
- * Show vulnerability details in a modal
+ * Opens a side panel showing full details of a specific vulnerability.
+ * Triggered when a user clicks a vulnerability in the sidebar tree.
+ * Shows CVE ID, severity, CVSS score, description, and reference links.
  */
 function showVulnerabilityDetails(vuln: Vulnerability) {
   const panel = vscode.window.createWebviewPanel(
@@ -916,7 +976,9 @@ function showVulnerabilityDetails(vuln: Vulnerability) {
 }
 
 /**
- * Get vulnerability details HTML
+ * Builds the HTML page for vulnerability details.
+ * All dynamic content is escaped to prevent XSS. CSP meta tag restricts
+ * what the webview can load (only inline styles, no scripts or external resources).
  */
 function getVulnerabilityDetailsHtml(vuln: Vulnerability): string {
   return `<!DOCTYPE html>
@@ -985,7 +1047,10 @@ function getVulnerabilityDetailsHtml(vuln: Vulnerability): string {
 }
 
 /**
- * Get workspace folder or show error
+ * Helper to get the current workspace folder.
+ * If only one folder is open, returns it directly.
+ * If multiple folders are open (multi-root workspace), shows a picker.
+ * If no folder is open, shows an error message.
  */
 async function getWorkspaceFolder(): Promise<vscode.WorkspaceFolder | undefined> {
   const folders = vscode.workspace.workspaceFolders;

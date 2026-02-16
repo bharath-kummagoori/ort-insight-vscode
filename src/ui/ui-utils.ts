@@ -1,5 +1,11 @@
 /**
- * UI Utilities - Helper functions for UI components
+ * UI Utilities - Shared helper functions used across all UI components
+ *
+ * Contains reusable functions for:
+ *   - License risk icons and colors (green/yellow/red based on license type)
+ *   - Severity formatting for vulnerabilities
+ *   - Text truncation and formatting
+ *   - HTML escaping to prevent XSS in webview panels
  */
 
 import { LicenseRisk } from '../types';
@@ -153,7 +159,9 @@ export function getVulnerabilityIcon(severity: string | undefined): ThemeIcon {
 }
 
 /**
- * Escape HTML for safe display
+ * Escapes HTML special characters to prevent XSS when injecting data into webviews.
+ * Converts &, <, >, ", ' into their HTML entity equivalents.
+ * Used by extension.ts and dashboard-webview.ts for all dynamic content.
  */
 export function escapeHtml(text: string): string {
   return text

@@ -1,5 +1,15 @@
 /**
  * ORT Result Parser - Parses ORT JSON output into structured data
+ *
+ * Reads the analyzer-result.json (or advisor-result.json) and transforms
+ * the raw ORT data into clean structures the UI components can display.
+ *
+ * Main responsibilities:
+ *   - Parse the JSON file and extract packages, projects, and vulnerabilities
+ *   - Classify each package's license risk (permissive, weak copyleft, strong copyleft)
+ *   - Build dependency tree items for the sidebar tree view
+ *   - Calculate license statistics for the dashboard (counts, percentages)
+ *   - Extract vulnerability data from advisor results
  */
 
 import * as fs from 'fs';
