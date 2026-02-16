@@ -1,9 +1,9 @@
 {
-  "name": "ort-insight",
+  "name": "ort-insight-vscode",
   "displayName": "ORT Insight",
   "description": "OSS Review Toolkit (ORT) integration for Visual Studio Code - License compliance, SBOM generation, and vulnerability analysis",
   "version": "0.1.0",
-  "publisher": "ort-insight",
+  "publisher": "ORTInsight",
   "repository": {
     "type": "git",
     "url": "https://github.com/bharath-kummagoori/ort-insight-vscode"
