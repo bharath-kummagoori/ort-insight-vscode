@@ -111,7 +111,7 @@ export class SetupDetector {
         }
       }
 
-      const output = child_process.execSync(`"${ortPath}" --version 2>&1`, {
+      const output = child_process.execFileSync(ortPath, ['--version'], {
         timeout: 30000,
         encoding: 'utf-8',
         env
@@ -173,7 +173,7 @@ export class SetupDetector {
    */
   private static getJavaVersion(javaBin: string): string | undefined {
     try {
-      const output = child_process.execSync(`"${javaBin}" -version 2>&1`, {
+      const output = child_process.execFileSync(javaBin, ['-version'], {
         timeout: 10000,
         encoding: 'utf-8'
       });
@@ -208,7 +208,7 @@ export class SetupDetector {
   private static findInPath(name: string): string | undefined {
     try {
       const cmd = process.platform === 'win32' ? 'where' : 'which';
-      const result = child_process.execSync(`${cmd} ${name}`, {
+      const result = child_process.execFileSync(cmd, [name], {
         timeout: 5000,
         encoding: 'utf-8'
       }).trim();

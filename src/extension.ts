@@ -17,6 +17,7 @@ import { DashboardWebviewProvider } from './ui/dashboard-webview';
 import { SetupWizard } from './ui/setup-wizard';
 import { SetupDetector } from './setup-detector';
 import { Vulnerability } from './types';
+import { escapeHtml } from './ui/ui-utils';
 
 let outputChannel: vscode.OutputChannel;
 let ortWrapper: ORTWrapper;
@@ -574,12 +575,12 @@ function getPolicyResultsHtml(
     const severityIcon = v.severity === 'ERROR' ? '&#10060;' : v.severity === 'WARNING' ? '&#9888;' : '&#8505;';
     return `
       <tr class="${severityClass}">
-        <td>${severityIcon} ${v.severity}</td>
-        <td title="${v.pkg}">${v.pkg.length > 50 ? v.pkg.substring(0, 50) + '...' : v.pkg}</td>
-        <td>${v.license}</td>
-        <td>${v.rule}</td>
-        <td>${v.message}</td>
-        <td class="howtofix">${v.howToFix}</td>
+        <td>${severityIcon} ${escapeHtml(v.severity)}</td>
+        <td title="${escapeHtml(v.pkg)}">${escapeHtml(v.pkg.length > 50 ? v.pkg.substring(0, 50) + '...' : v.pkg)}</td>
+        <td>${escapeHtml(v.license)}</td>
+        <td>${escapeHtml(v.rule)}</td>
+        <td>${escapeHtml(v.message)}</td>
+        <td class="howtofix">${escapeHtml(v.howToFix)}</td>
       </tr>`;
   }).join('');
 
@@ -587,6 +588,7 @@ function getPolicyResultsHtml(
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline';">
   <title>ORT Policy Evaluation Results</title>
   <style>
     body {
@@ -921,7 +923,8 @@ function getVulnerabilityDetailsHtml(vuln: Vulnerability): string {
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>${vuln.id}</title>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline';">
+  <title>${escapeHtml(vuln.id)}</title>
   <style>
     body {
       font-family: var(--vscode-font-family);
@@ -937,33 +940,33 @@ function getVulnerabilityDetailsHtml(vuln: Vulnerability): string {
   </style>
 </head>
 <body>
-  <h1>${vuln.id}</h1>
+  <h1>${escapeHtml(vuln.id)}</h1>
 
   ${vuln.severity ? `
     <div class="field">
       <div class="label">Severity</div>
-      <div class="value">${vuln.severity}</div>
+      <div class="value">${escapeHtml(vuln.severity)}</div>
     </div>
   ` : ''}
 
   ${vuln.cvss ? `
     <div class="field">
       <div class="label">CVSS Score</div>
-      <div class="value">${vuln.cvss}</div>
+      <div class="value">${escapeHtml(String(vuln.cvss))}</div>
     </div>
   ` : ''}
 
   ${vuln.summary ? `
     <div class="field">
       <div class="label">Summary</div>
-      <div class="value">${vuln.summary}</div>
+      <div class="value">${escapeHtml(vuln.summary)}</div>
     </div>
   ` : ''}
 
   ${vuln.description ? `
     <div class="field">
       <div class="label">Description</div>
-      <div class="value">${vuln.description}</div>
+      <div class="value">${escapeHtml(vuln.description)}</div>
     </div>
   ` : ''}
 
@@ -972,7 +975,7 @@ function getVulnerabilityDetailsHtml(vuln: Vulnerability): string {
       <div class="label">References</div>
       <div class="value">
         <ul>
-          ${vuln.references.map(ref => `<li><a href="${ref.url}">${ref.url}</a></li>`).join('')}
+          ${vuln.references.map(ref => `<li><a href="${escapeHtml(ref.url)}">${escapeHtml(ref.url)}</a></li>`).join('')}
         </ul>
       </div>
     </div>

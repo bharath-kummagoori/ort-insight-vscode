@@ -367,7 +367,7 @@ export class ORTWrapper {
     // Check if 'ort' is available in PATH by trying to resolve it
     try {
       const whereCmd = process.platform === 'win32' ? 'where' : 'which';
-      const result = child_process.execSync(`${whereCmd} ${ortPath}`, { timeout: 5000 }).toString().trim();
+      const result = child_process.execFileSync(whereCmd, [ortPath], { timeout: 5000 }).toString().trim();
       if (result) {
         this.outputChannel.appendLine(`ORT found in PATH: ${result}`);
         return true;
@@ -407,9 +407,13 @@ export class ORTWrapper {
         }
       }
 
+      // Use shell on Windows for .bat/.cmd files, but not on other platforms
+      const isWindows = process.platform === 'win32';
+      const needsShell = isWindows && (command.endsWith('.bat') || command.endsWith('.cmd'));
+
       const childProcess = child_process.spawn(command, args, {
         cwd,
-        shell: true,
+        shell: needsShell,
         env
       });
 
